@@ -23,7 +23,6 @@ export interface TimelineItem {
 	color?: TimelineColor;
 }
 
-const PIXELS_PER_DAY = 10;
 const START_DATE = new Date('1970-01-01');
 
 interface ExpectedFileState {
@@ -47,6 +46,9 @@ export class TimelineView extends ItemView {
 	// Selection state - persists across view updates
 	private selectedIndex: number | null = null;
 	private selectedCardData: { startX: number; endX: number; startDate: string; endDate: string; title: string } | null = null;
+	
+	// Time scale - pixels per day (default 10)
+	private timeScale: number = 10;
 
 	constructor(leaf: WorkspaceLeaf) {
 		super(leaf);
@@ -158,11 +160,11 @@ export class TimelineView extends ItemView {
 		for (const item of sortedItems) {
 			// Calculate x position (days from epoch start)
 			const daysFromStart = this.daysBetween(START_DATE, item.dateStart);
-			const x = daysFromStart * PIXELS_PER_DAY;
+			const x = daysFromStart * this.timeScale;
 			
 			// Calculate width (duration in days)
 			const duration = this.daysBetween(item.dateStart, item.dateEnd);
-			const width = Math.max(duration, 1) * PIXELS_PER_DAY;
+			const width = Math.max(duration, 1) * this.timeScale;
 			
 			// Calculate Y position from assigned layer
 			const layer = item.layer ?? 0;
@@ -237,7 +239,7 @@ export class TimelineView extends ItemView {
 	}
 
 	private pixelsToDate(pixels: number): string {
-		const days = Math.round(pixels / PIXELS_PER_DAY);
+		const days = Math.round(pixels / this.timeScale);
 		const msOffset = days * 24 * 60 * 60 * 1000;
 		const date = new Date(START_DATE.getTime() + msOffset);
 		
@@ -248,6 +250,46 @@ export class TimelineView extends ItemView {
 		console.log(`pixelsToDate: pixels=${pixels}, days=${days}, msOffset=${msOffset}, result=${year}-${month}-${day}`);
 		
 		return `${year}-${month}-${day}`;
+	}
+
+	private recalculateItemPositions(): void {
+		// Recalculate x and width for all items based on current time scale
+		for (let i = 0; i < this.timelineItems.length; i++) {
+			const item = this.timelineItems[i]!;
+			
+			// Calculate days from epoch for start date
+			const dateStart = this.parseDate(item.dateStart);
+			if (!dateStart) continue;
+			const daysFromStart = this.daysBetween(START_DATE, dateStart);
+			const newX = daysFromStart * this.timeScale;
+			
+			// Calculate duration and width
+			const dateEnd = this.parseDate(item.dateEnd);
+			if (!dateEnd) continue;
+			const duration = this.daysBetween(dateStart, dateEnd);
+			const newWidth = Math.max(duration, 1) * this.timeScale;
+			
+			// Update item with new positions
+			this.timelineItems[i] = {
+				...item,
+				x: newX,
+				width: newWidth
+			};
+		}
+		
+		// Update selection data if a card is selected
+		if (this.selectedIndex !== null && this.selectedCardData) {
+			const item = this.timelineItems[this.selectedIndex];
+			if (item) {
+				this.selectedCardData = {
+					...this.selectedCardData,
+					startX: item.x,
+					endX: item.x + item.width
+				};
+			}
+		}
+		
+		console.log(`Timeline: Recalculated positions with timeScale=${this.timeScale}`);
 	}
 
 	private async updateItemDates(index: number, newX: number, newWidth: number): Promise<void> {
@@ -650,17 +692,15 @@ export class TimelineView extends ItemView {
 		// Calculate and store boundary data for the selected card
 		if (index >= 0 && index < this.timelineItems.length) {
 			const item = this.timelineItems[index]!;
-			const PIXELS_PER_DAY = 10;
-			const START_DATE = new Date('1970-01-01');
 			
 			// Calculate dates from positions
-			const daysStart = Math.round(item.x / PIXELS_PER_DAY);
+			const daysStart = Math.round(item.x / this.timeScale);
 			const dateStart = new Date(START_DATE.getTime() + daysStart * 24 * 60 * 60 * 1000);
 			const dayStart = dateStart.getDate().toString().padStart(2, '0');
 			const monthStart = (dateStart.getMonth() + 1).toString().padStart(2, '0');
 			const yearStart = dateStart.getFullYear();
 			
-			const daysEnd = Math.round((item.x + item.width) / PIXELS_PER_DAY);
+			const daysEnd = Math.round((item.x + item.width) / this.timeScale);
 			const dateEnd = new Date(START_DATE.getTime() + daysEnd * 24 * 60 * 60 * 1000);
 			const dayEnd = dateEnd.getDate().toString().padStart(2, '0');
 			const monthEnd = (dateEnd.getMonth() + 1).toString().padStart(2, '0');
@@ -699,17 +739,15 @@ export class TimelineView extends ItemView {
 			// Calculate and store boundary data for the selected card
 			if (index >= 0 && index < this.timelineItems.length) {
 				const item = this.timelineItems[index]!;
-				const PIXELS_PER_DAY = 10;
-				const START_DATE = new Date('1970-01-01');
 				
 				// Calculate dates from positions
-				const daysStart = Math.round(item.x / PIXELS_PER_DAY);
+				const daysStart = Math.round(item.x / this.timeScale);
 				const dateStart = new Date(START_DATE.getTime() + daysStart * 24 * 60 * 60 * 1000);
 				const dayStart = dateStart.getDate().toString().padStart(2, '0');
 				const monthStart = (dateStart.getMonth() + 1).toString().padStart(2, '0');
 				const yearStart = dateStart.getFullYear();
 				
-				const daysEnd = Math.round((item.x + item.width) / PIXELS_PER_DAY);
+				const daysEnd = Math.round((item.x + item.width) / this.timeScale);
 				const dateEnd = new Date(START_DATE.getTime() + daysEnd * 24 * 60 * 60 * 1000);
 				const dayEnd = dateEnd.getDate().toString().padStart(2, '0');
 				const monthEnd = (dateEnd.getMonth() + 1).toString().padStart(2, '0');
@@ -822,6 +860,16 @@ export class TimelineView extends ItemView {
 							}
 						}
 					},
+					onTimeScaleChange: (timeScale: number) => {
+						// Update time scale and recalculate all item positions
+						this.timeScale = timeScale;
+						// Recalculate all item positions with new time scale
+						this.recalculateItemPositions();
+						// Refresh UI
+						if (this.component && this.component.refreshItems) {
+							this.component.refreshItems(this.timelineItems);
+						}
+					},
 					onCanvasClick: () => {
 						this.clearSelection();
 					}
@@ -889,12 +937,12 @@ export class TimelineView extends ItemView {
 				
 				// Calculate new position values from restored dates
 				const daysFromStart = this.daysBetween(START_DATE, this.parseDate(entry.previousState.dateStart)!);
-				const newX = daysFromStart * PIXELS_PER_DAY;
+				const newX = daysFromStart * this.timeScale;
 				const duration = this.daysBetween(
 					this.parseDate(entry.previousState.dateStart)!,
 					this.parseDate(entry.previousState.dateEnd)!
 				);
-				const newWidth = Math.max(duration, 1) * PIXELS_PER_DAY;
+				const newWidth = Math.max(duration, 1) * this.timeScale;
 				const newY = LayerManager.layerToY(entry.previousState.layer);
 				
 				this.timelineItems[itemIndex] = {
@@ -974,12 +1022,12 @@ export class TimelineView extends ItemView {
 				
 				// Calculate new position values from restored dates
 				const daysFromStart = this.daysBetween(START_DATE, this.parseDate(entry.newState.dateStart)!);
-				const newX = daysFromStart * PIXELS_PER_DAY;
+				const newX = daysFromStart * this.timeScale;
 				const duration = this.daysBetween(
 					this.parseDate(entry.newState.dateStart)!,
 					this.parseDate(entry.newState.dateEnd)!
 				);
-				const newWidth = Math.max(duration, 1) * PIXELS_PER_DAY;
+				const newWidth = Math.max(duration, 1) * this.timeScale;
 				const newY = LayerManager.layerToY(entry.newState.layer);
 				
 				this.timelineItems[itemIndex] = {

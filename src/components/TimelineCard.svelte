@@ -7,6 +7,7 @@
 		width: number;
 		title: string;
 		scale: number;
+		timeScale: number;
 		translateX: number;
 		layer: number;
 		color?: 'red' | 'blue' | 'green' | 'yellow';
@@ -19,14 +20,15 @@
 		onUpdateSelection?: (startX: number, endX: number, startDate: string, endDate: string) => void;
 	}
 
-	let { x, y, width, title, scale, translateX, layer, color, isSelected = false, onResize, onMove, onLayerChange, onClick, onSelect, onUpdateSelection }: Props = $props();
+	let { x, y, width, title, scale, timeScale, translateX, layer, color, isSelected = false, onResize, onMove, onLayerChange, onClick, onSelect, onUpdateSelection }: Props = $props();
 
 	const GRID_SPACING = 50;
-	const PIXELS_PER_DAY = 10;
 	const START_DATE = new Date('1970-01-01');
 	const EDGE_ZONE = 8; // px from edge to trigger resize handle
 	const MIN_WIDTH_DAYS = 1;
-	const MIN_WIDTH_PX = MIN_WIDTH_DAYS * PIXELS_PER_DAY;
+	
+	// Calculate min width in pixels based on current time scale
+	let MIN_WIDTH_PX = $derived(() => MIN_WIDTH_DAYS * timeScale);
 
 	// Local display state - used during drag operations
 	let displayX = $state(x);
@@ -78,7 +80,7 @@
 
 	// Calculate date from X position (days since START_DATE)
 	function xToDate(xPos: number): string {
-		const days = Math.round(xPos / PIXELS_PER_DAY);
+		const days = Math.round(xPos / timeScale);
 		const date = new Date(START_DATE.getTime() + days * 24 * 60 * 60 * 1000);
 		const day = date.getDate().toString().padStart(2, '0');
 		const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -119,9 +121,9 @@
 				// Right edge: change width
 				let newWidth = dragStartWidth + worldDelta;
 				// Snap to whole days and enforce minimum
-				let days = Math.round(newWidth / PIXELS_PER_DAY);
+				let days = Math.round(newWidth / timeScale);
 				days = Math.max(days, MIN_WIDTH_DAYS);
-				newWidth = days * PIXELS_PER_DAY;
+				newWidth = days * timeScale;
 				
 				// Update local display state directly
 				displayWidth = newWidth;
@@ -140,9 +142,9 @@
 				let newWidth = dragStartWidth - worldDelta;
 				
 				// Snap to whole days and enforce minimum
-				let days = Math.round(newWidth / PIXELS_PER_DAY);
+				let days = Math.round(newWidth / timeScale);
 				days = Math.max(days, MIN_WIDTH_DAYS);
-				newWidth = days * PIXELS_PER_DAY;
+				newWidth = days * timeScale;
 				
 				// Calculate new X based on new width to keep end date constant
 				let newX = (dragStartX + dragStartWidth) - newWidth;
@@ -171,8 +173,8 @@
 			// Calculate new X position
 			let newX = dragStartX + worldDeltaX;
 			// Snap to whole days
-			let days = Math.round(newX / PIXELS_PER_DAY);
-			newX = days * PIXELS_PER_DAY;
+			let days = Math.round(newX / timeScale);
+			newX = days * timeScale;
 			
 			// Calculate new Y position and target layer
 			let newY = dragStartY + worldDeltaY;

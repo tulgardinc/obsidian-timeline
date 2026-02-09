@@ -28,6 +28,9 @@
 	let scale = $state(1);
 	let translateX = $state(0);
 	let translateY = $state(0);
+	
+	// Time scale - pixels per day (default 10, no limits)
+	let timeScale = $state(10);
 
 	// Viewport dimensions
 	let viewportWidth = $state(0);
@@ -54,16 +57,24 @@
 	interface Props {
 		children: import('svelte').Snippet;
 		onScaleChange?: (scale: number, translateX: number) => void;
+		onTimeScaleChange?: (timeScale: number) => void;
 		selectedCard?: CardHoverData | null;
 		onCanvasClick?: () => void;
 	}
 
-	let { children, onScaleChange, selectedCard = null, onCanvasClick }: Props = $props();
+	let { children, onScaleChange, onTimeScaleChange, selectedCard = null, onCanvasClick }: Props = $props();
 
 	// Notify parent of scale changes
 	$effect(() => {
 		if (onScaleChange) {
 			onScaleChange(scale, translateX);
+		}
+	});
+	
+	// Notify parent of time scale changes
+	$effect(() => {
+		if (onTimeScaleChange) {
+			onTimeScaleChange(timeScale);
 		}
 	});
 
@@ -105,34 +116,111 @@
 	function handleWheel(event: WheelEvent) {
 		event.preventDefault();
 
-		if (event.ctrlKey || event.metaKey) {
-			// Zoom
-			const zoomFactor = 0.1;
-			const delta = event.deltaY > 0 ? -zoomFactor : zoomFactor;
-			const newScale = Math.max(0.1, Math.min(5, scale * (1 + delta)));
-			
-			// Zoom towards mouse position
-			const rect = viewportRef.getBoundingClientRect();
-			const mouseX = event.clientX - rect.left;
-			const mouseY = event.clientY - rect.top;
-			
-			// Calculate world coordinates before zoom
-			const worldX = (mouseX - translateX) / scale;
-			const worldY = (mouseY - translateY) / scale;
-			
-			// Apply new scale
-			scale = newScale;
-			
-			// Adjust translation to keep mouse over same world point
-			translateX = mouseX - worldX * scale;
-			translateY = mouseY - worldY * scale;
-			
-			// Trigger crisp render after zoom
-			triggerCrispRender();
+		// Detect trackpad vs mouse wheel
+		// Trackpad: deltaMode = 0 (pixels), usually has deltaX and significant deltaY
+		// Mouse wheel: deltaMode = 1 (lines), typically only deltaY
+		const isTrackpad = event.deltaMode === 0 && (Math.abs(event.deltaX) > 0 || Math.abs(event.deltaY) < 50);
+		
+		// Check if this is a pinch gesture (ctrlKey is set on macOS trackpad pinch)
+		// Pinch can be identified by ctrlKey=true but metaKey=false (Cmd not held)
+		const isPinch = event.ctrlKey && !event.metaKey;
+		// Check if Cmd is held (for modified trackpad gestures)
+		const isCmdHeld = event.metaKey;
+		
+		if (isTrackpad) {
+			// Trackpad behavior
+			if (isPinch) {
+				// Pinch gesture = Canvas zoom (this takes priority over Cmd+pinch)
+				const zoomFactor = 0.1;
+				const delta = event.deltaY > 0 ? -zoomFactor : zoomFactor;
+				const newScale = scale * (1 + delta);
+				
+				// Zoom towards center of viewport
+				const rect = viewportRef.getBoundingClientRect();
+				const centerX = rect.width / 2;
+				const centerY = rect.height / 2;
+				
+				// Calculate world coordinates before zoom
+				const worldX = (centerX - translateX) / scale;
+				const worldY = (centerY - translateY) / scale;
+				
+				// Apply new scale
+				scale = newScale;
+				
+				// Adjust translation to keep center stable
+				translateX = centerX - worldX * scale;
+				translateY = centerY - worldY * scale;
+				
+				// Trigger crisp render after zoom
+				triggerCrispRender();
+			} else if (isCmdHeld) {
+				// Cmd + two-finger scroll = Time-scale zoom
+				const zoomFactor = 0.1;
+				const delta = event.deltaY > 0 ? -zoomFactor : zoomFactor;
+				const newTimeScale = timeScale * (1 + delta);
+				
+				// Get viewport center
+				const rect = viewportRef.getBoundingClientRect();
+				const centerX = rect.width / 2;
+				
+				// Calculate world coordinates of center before zoom
+				const worldCenterX = (centerX - translateX) / timeScale;
+				
+				// Apply new time scale
+				timeScale = newTimeScale;
+				
+				// Adjust translation to keep center point stable
+				translateX = centerX - worldCenterX * timeScale;
+			} else {
+				// Two-finger scroll without modifier = Pan
+				translateX -= event.deltaX;
+				translateY -= event.deltaY;
+			}
 		} else {
-			// Pan
-			translateX -= event.deltaX;
-			translateY -= event.deltaY;
+			// Mouse wheel behavior (unchanged)
+			if (event.ctrlKey || event.metaKey) {
+				// Ctrl/Cmd + wheel = Time-scale zoom
+				const zoomFactor = 0.1;
+				const delta = event.deltaY > 0 ? -zoomFactor : zoomFactor;
+				const newTimeScale = timeScale * (1 + delta);
+				
+				// Get viewport center
+				const rect = viewportRef.getBoundingClientRect();
+				const centerX = rect.width / 2;
+				
+				// Calculate world coordinates of center before zoom
+				const worldCenterX = (centerX - translateX) / timeScale;
+				
+				// Apply new time scale
+				timeScale = newTimeScale;
+				
+				// Adjust translation to keep center point stable
+				translateX = centerX - worldCenterX * timeScale;
+			} else {
+				// Mouse wheel alone = Canvas zoom
+				const zoomFactor = 0.1;
+				const delta = event.deltaY > 0 ? -zoomFactor : zoomFactor;
+				const newScale = scale * (1 + delta);
+				
+				// Zoom towards mouse position
+				const rect = viewportRef.getBoundingClientRect();
+				const mouseX = event.clientX - rect.left;
+				const mouseY = event.clientY - rect.top;
+				
+				// Calculate world coordinates before zoom
+				const worldX = (mouseX - translateX) / scale;
+				const worldY = (mouseY - translateY) / scale;
+				
+				// Apply new scale
+				scale = newScale;
+				
+				// Adjust translation to keep mouse over same world point
+				translateX = mouseX - worldX * scale;
+				translateY = mouseY - worldY * scale;
+				
+				// Trigger crisp render after zoom
+				triggerCrispRender();
+			}
 		}
 	}
 
@@ -309,6 +397,7 @@
 >
 	<TimelineHeader
 		scale={scale}
+		timeScale={timeScale}
 		translateX={translateX}
 		viewportWidth={viewportWidth}
 		mouseX={mouseX}
@@ -370,6 +459,7 @@
 		position: relative;
 		cursor: grab;
 		background: var(--background-primary);
+		--no-tooltip: true;
 	}
 
 	.viewport.panning {

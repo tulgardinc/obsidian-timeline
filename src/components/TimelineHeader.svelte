@@ -1,5 +1,4 @@
 <script lang="ts">
-	const PIXELS_PER_DAY = 10;
 	const START_DATE = new Date('1970-01-01');
 
 	interface CardHoverData {
@@ -12,6 +11,7 @@
 
 	interface Props {
 		scale: number;
+		timeScale: number;
 		translateX: number;
 		viewportWidth: number;
 		mouseX: number | null;
@@ -19,7 +19,7 @@
 		selectedCard?: CardHoverData | null;
 	}
 
-	let { scale, translateX, viewportWidth, mouseX, isHovering, selectedCard = null }: Props = $props();
+	let { scale, timeScale, translateX, viewportWidth, mouseX, isHovering, selectedCard = null }: Props = $props();
 
 	// Calculate visible day markers with proper viewport culling
 	let visibleMarkers = $derived(() => {
@@ -27,13 +27,13 @@
 		
 		// Calculate the day range that could potentially be visible
 		// Start from the left edge of the viewport
-		const startDay = Math.floor((-translateX / scale) / PIXELS_PER_DAY);
+		const startDay = Math.floor((-translateX / scale) / timeScale);
 		// End at the right edge of the viewport
-		const endDay = Math.ceil(((-translateX + viewportWidth) / scale) / PIXELS_PER_DAY);
+		const endDay = Math.ceil(((-translateX + viewportWidth) / scale) / timeScale);
 		
 		for (let day = startDay; day <= endDay; day++) {
 			// Calculate screen position for this marker
-			const worldX = day * PIXELS_PER_DAY;
+			const worldX = day * timeScale;
 			const screenX = worldX * scale + translateX;
 			
 			// Cull markers that are outside the viewport
@@ -59,7 +59,7 @@
 		
 		// Convert mouse X to world coordinates
 		const worldX = (mouseX - translateX) / scale;
-		const days = Math.floor(worldX / PIXELS_PER_DAY);
+		const days = Math.floor(worldX / timeScale);
 		
 		// Calculate date
 		const date = new Date(START_DATE.getTime() + days * 24 * 60 * 60 * 1000);

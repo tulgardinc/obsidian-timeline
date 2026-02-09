@@ -21,12 +21,13 @@
 		onItemClick: (index: number) => void;
 		onItemSelect: (index: number) => void;
 		onUpdateSelectionData: (startX: number, endX: number, startDate: string, endDate: string) => void;
+		onTimeScaleChange: (timeScale: number) => void;
 		onCanvasClick?: () => void;
 		// Callback to refresh items from parent
 		onRefreshItems?: () => TimelineItem[];
 	}
 
-	let { items: initialItems, selectedIndex: initialSelectedIndex = null, selectedCard: initialSelectedCard = null, onItemResize, onItemMove, onItemLayerChange, onItemClick, onItemSelect, onUpdateSelectionData, onCanvasClick, onRefreshItems }: Props = $props();
+	let { items: initialItems, selectedIndex: initialSelectedIndex = null, selectedCard: initialSelectedCard = null, onItemResize, onItemMove, onItemLayerChange, onItemClick, onItemSelect, onUpdateSelectionData, onTimeScaleChange, onCanvasClick, onRefreshItems }: Props = $props();
 
 	// Create local reactive state from props for optimistic updates during drag/resize
 	let items = $state<TimelineItem[]>([...initialItems]);
@@ -51,10 +52,19 @@
 	// Track current scale and translateX from InfiniteCanvas
 	let currentScale = $state(1);
 	let currentTranslateX = $state(0);
+	let currentTimeScale = $state(10);
 
 	function handleScaleChange(scale: number, translateX: number) {
 		currentScale = scale;
 		currentTranslateX = translateX;
+	}
+	
+	function handleTimeScaleChange(timeScale: number) {
+		currentTimeScale = timeScale;
+		// Notify parent to recalculate items with new time scale
+		if (onTimeScaleChange) {
+			onTimeScaleChange(timeScale);
+		}
 	}
 
 	function handleCanvasClick() {
@@ -115,7 +125,8 @@
 
 <div class="timeline-view" tabindex="-1">
 	<InfiniteCanvas 
-		onScaleChange={handleScaleChange} 
+		onScaleChange={handleScaleChange}
+		onTimeScaleChange={handleTimeScaleChange}
 		selectedCard={selectedCard}
 		onCanvasClick={handleCanvasClick}
 	>
@@ -128,6 +139,7 @@
 				width={item.width}
 				title={item.title}
 				scale={currentScale}
+				timeScale={currentTimeScale}
 				translateX={currentTranslateX}
 				layer={item.layer ?? 0}
 				color={item.color}
