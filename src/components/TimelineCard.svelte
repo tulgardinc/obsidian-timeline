@@ -2,7 +2,8 @@
 	import { onMount } from "svelte";
 	import { TimeScaleManager } from "../utils/TimeScaleManager";
 	import { getViewportContext } from "../contexts/ViewportContext";
-	import { calculateClampedBounds } from "../utils/ViewportClamping";
+	import { CardCameraRenderer, type CardWorldData } from "../utils/CardCameraRenderer";
+	import type { ViewportState } from "../utils/CameraSystem";
 
 	interface Props {
 		x: number;
@@ -37,23 +38,9 @@
 	let scale = $derived(viewport?.getScale() ?? 1);
 	let timeScale = $derived(viewport?.getTimeScale() ?? 10);
 	let translateX = $derived(viewport?.getTranslateX() ?? 0);
+	let translateY = $derived(viewport?.getTranslateY() ?? 0);
 	let viewportWidth = $derived(viewport?.getViewportWidth() ?? 0);
-
-	// Viewport clamping calculations using utility function
-	let clampedBounds = $derived(() => calculateClampedBounds(
-		displayX,
-		displayWidth,
-		scale,
-		translateX,
-		viewportWidth
-	));
-
-	let visualX = $derived(() => clampedBounds().visualX);
-	let visualWidth = $derived(() => clampedBounds().visualWidth);
-	let isClampedLeft = $derived(() => clampedBounds().isClampedLeft);
-	let isClampedRight = $derived(() => clampedBounds().isClampedRight);
-	let isClampedBoth = $derived(() => clampedBounds().isClampedBoth);
-	let isCompletelyOutside = $derived(() => clampedBounds().isCompletelyOutside);
+	let viewportHeight = $derived(viewport?.getViewportHeight() ?? 0);
 
 	// Get current scale level for marker-based snapping (uses effective density = timeScale * scale)
 	let scaleLevel = $derived(() => TimeScaleManager.getScaleLevel(timeScale, scale));
@@ -76,6 +63,39 @@
 	let snappedY = $derived(() => {
 		return Math.round(displayY / GRID_SPACING) * GRID_SPACING;
 	});
+
+	// Build viewport state for camera system
+	let viewportState = $derived<ViewportState>({
+		width: viewportWidth,
+		height: viewportHeight,
+		translateX,
+		translateY,
+		scale
+	});
+
+	// Card data in world coordinates - computed from display state
+	let cardData = $derived<CardWorldData>({
+		x: displayX,
+		y: snappedY(),
+		width: displayWidth,
+		height: 50 // Fixed card height
+	});
+
+	// Use Camera System to calculate render data
+	// This keeps coordinates in safe viewport-relative range
+	let renderData = $derived(() => CardCameraRenderer.calculateRenderData(
+		cardData,
+		viewportState
+	));
+
+	// Extract render properties
+	let visualX = $derived(() => renderData().x);
+	let visualY = $derived(() => renderData().y);
+	let visualWidth = $derived(() => renderData().width);
+	let isClampedLeft = $derived(() => renderData().clampedLeft);
+	let isClampedRight = $derived(() => renderData().clampedRight);
+	let isClampedBoth = $derived(() => isClampedLeft() && isClampedRight());
+	let isCompletelyOutside = $derived(() => !renderData().visible);
 
 	// Resize and move state
 	let isResizing = $state(false);

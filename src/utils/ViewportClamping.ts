@@ -12,10 +12,9 @@ export interface ClampedBounds {
  * When cards extend beyond the viewport edges, they are visually clamped
  * while maintaining their actual world coordinates for interactions.
  * 
- * This implementation performs all visibility checks in world coordinates
- * to avoid floating-point precision loss when worldX is large and scale is high.
- * The key insight is that converting viewport bounds to world space (division)
- * is more numerically stable than converting card bounds to screen space (multiplication).
+ * This implementation performs visibility checks using relative coordinates
+ * from viewport center to minimize floating-point precision errors when
+ * worldX is very large (billions of pixels from origin).
  */
 export function calculateClampedBounds(
 	worldX: number,
@@ -24,61 +23,57 @@ export function calculateClampedBounds(
 	translateX: number,
 	viewportWidth: number
 ): ClampedBounds {
-	// Viewport edges in world coordinates
-	// Derived from: screenX = worldX * scale + translateX
-	// Solving for worldX when screenX = 0 (left edge):
-	//   0 = worldX * scale + translateX
-	//   worldX = -translateX / scale
-	const viewportLeftWorld = -translateX / scale;
-	
-	// Solving for worldX when screenX = viewportWidth (right edge):
-	//   viewportWidth = worldX * scale + translateX
-	//   worldX = (viewportWidth - translateX) / scale
-	const viewportRightWorld = (viewportWidth - translateX) / scale;
+	// Handle edge cases
+	if (scale === 0) {
+		return {
+			visualX: worldX,
+			visualWidth: 0,
+			isClampedLeft: false,
+			isClampedRight: false,
+			isClampedBoth: false,
+			isCompletelyOutside: true
+		};
+	}
 
-	// Card boundaries
-	const cardLeft = worldX;
-	const cardRight = worldX + worldWidth;
+	// Calculate viewport center in world coordinates
+	// This gives us a reference point close to both the viewport and card
+	const viewportCenterWorld = -(translateX - viewportWidth / 2) / scale;
+	
+	// Calculate card position relative to viewport center
+	// This keeps numbers small and preserves precision
+	const cardLeftRel = worldX - viewportCenterWorld;
+	const cardRightRel = cardLeftRel + worldWidth;
+	
+	// Viewport half-width in world coordinates
+	const viewportHalfWidthWorld = (viewportWidth / 2) / scale;
+	
+	// Viewport edges relative to center
+	const viewportLeftRel = -viewportHalfWidthWorld;
+	const viewportRightRel = viewportHalfWidthWorld;
 
-	// Visibility checks in WORLD coordinates (avoids large multiplications)
-	// A card is clamped on the left if its left edge is left of the viewport's left edge
-	const isClampedLeft = cardLeft < viewportLeftWorld;
-	
-	// A card is clamped on the right if its right edge is right of the viewport's right edge
-	const isClampedRight = cardRight > viewportRightWorld;
-	
-	// A card is clamped on both sides if it spans the entire viewport
+	// Visibility checks using RELATIVE coordinates
+	const isClampedLeft = cardLeftRel < viewportLeftRel;
+	const isClampedRight = cardRightRel > viewportRightRel;
 	const isClampedBoth = isClampedLeft && isClampedRight;
+	const isCompletelyOutside = cardRightRel < viewportLeftRel || cardLeftRel > viewportRightRel;
 
-	// A card is completely outside if it's entirely to the left or right of the viewport
-	// This check is crucial for culling - it determines if the card should be rendered at all
-	const isCompletelyOutside = cardRight < viewportLeftWorld || cardLeft > viewportRightWorld;
-
-	// Calculate visual bounds in WORLD coordinates (what we actually render)
-	// These are the portions of the card that fall within the viewport
+	// Calculate visual bounds in WORLD coordinates
 	let visualX: number;
 	let visualWidth: number;
 
 	if (isCompletelyOutside) {
-		// Card is not visible at all - still return valid (though empty) bounds
-		// to prevent downstream errors. The caller should check isCompletelyOutside
-		// and skip rendering when true.
 		visualX = worldX;
 		visualWidth = 0;
 	} else if (isClampedBoth) {
-		// Card spans entire viewport - visual bounds are the viewport itself
-		visualX = viewportLeftWorld;
-		visualWidth = viewportRightWorld - viewportLeftWorld;
+		visualX = viewportCenterWorld + viewportLeftRel;
+		visualWidth = viewportRightRel - viewportLeftRel;
 	} else if (isClampedRight) {
-		// Card extends beyond right edge - clamp to viewport right
 		visualX = worldX;
-		visualWidth = viewportRightWorld - worldX;
+		visualWidth = (viewportCenterWorld + viewportRightRel) - worldX;
 	} else if (isClampedLeft) {
-		// Card extends beyond left edge - clamp to viewport left
-		visualX = viewportLeftWorld;
-		visualWidth = cardRight - viewportLeftWorld;
+		visualX = viewportCenterWorld + viewportLeftRel;
+		visualWidth = cardRightRel - viewportLeftRel;
 	} else {
-		// Card fully visible - use original bounds
 		visualX = worldX;
 		visualWidth = worldWidth;
 	}
