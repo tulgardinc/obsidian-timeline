@@ -54,6 +54,11 @@
 	let currentTranslateX = $state(0);
 	let currentTimeScale = $state(10);
 
+	// Track if any card is being dragged or resized
+	let isAnyCardDragging = $state(false);
+	let isAnyCardResizing = $state(false);
+	let activeResizeEdge = $state<'left' | 'right' | null>(null);
+
 	function handleScaleChange(scale: number, translateX: number) {
 		currentScale = scale;
 		currentTranslateX = translateX;
@@ -90,6 +95,16 @@
 		}
 	}
 
+	function handleResizeStart(edge: 'left' | 'right') {
+		isAnyCardResizing = true;
+		activeResizeEdge = edge;
+	}
+
+	function handleResizeEnd() {
+		isAnyCardResizing = false;
+		activeResizeEdge = null;
+	}
+
 	function handleMove(index: number, newX: number, newY: number, finished: boolean) {
 		// Update the item optimistically by creating new object for reactivity
 		if (index >= 0 && index < items.length) {
@@ -104,6 +119,14 @@
 				onItemMove(index, newX, newY);
 			}
 		}
+	}
+
+	function handleDragStart() {
+		isAnyCardDragging = true;
+	}
+
+	function handleDragEnd() {
+		isAnyCardDragging = false;
 	}
 
 	function handleLayerChange(index: number, newLayer: number, newX: number, newWidth: number, finished: boolean) {
@@ -129,6 +152,9 @@
 		onTimeScaleChange={handleTimeScaleChange}
 		selectedCard={selectedCard}
 		onCanvasClick={handleCanvasClick}
+		isAnyCardDragging={isAnyCardDragging}
+		isAnyCardResizing={isAnyCardResizing}
+		activeResizeEdge={activeResizeEdge}
 	>
 		{#each items as item, index (item.file.path)}
 			{@const isCardSelected = selectedIndex === index}
@@ -150,6 +176,10 @@
 				onClick={() => onItemClick(index)}
 				onSelect={() => onItemSelect(index)}
 				onUpdateSelection={(startX, endX, startDate, endDate) => onUpdateSelectionData(startX, endX, startDate, endDate)}
+				onDragStart={handleDragStart}
+				onDragEnd={handleDragEnd}
+				onResizeStart={handleResizeStart}
+				onResizeEnd={handleResizeEnd}
 			/>
 		{/each}
 	</InfiniteCanvas>

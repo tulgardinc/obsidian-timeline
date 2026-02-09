@@ -17,9 +17,11 @@
 		mouseX: number | null;
 		isHovering: boolean;
 		selectedCard?: CardHoverData | null;
+		isAnyCardResizing?: boolean;
+		activeResizeEdge?: 'left' | 'right' | null;
 	}
 
-	let { scale, timeScale, translateX, viewportWidth, mouseX, isHovering, selectedCard = null }: Props = $props();
+	let { scale, timeScale, translateX, viewportWidth, mouseX, isHovering, selectedCard = null, isAnyCardResizing = false, activeResizeEdge = null }: Props = $props();
 
 	// Calculate visible day markers with proper viewport culling
 	let visibleMarkers = $derived(() => {
@@ -92,8 +94,8 @@
 		<div class="timeline-line" style="width: {viewportWidth}px;"></div>
 	</div>
 	
-	<!-- Hover overlay (stays at mouse position) -->
-	{#if isHovering && mouseX !== null}
+	<!-- Hover overlay (stays at mouse position) - hidden when resizing -->
+	{#if isHovering && mouseX !== null && !isAnyCardResizing}
 		{@const hoverInfo = hoverDate()}
 		{#if hoverInfo}
 			{@const screenX = hoverInfo.worldX * scale + translateX}
@@ -113,6 +115,7 @@
 		{@const endScreenX = selectedCard.endX * scale + translateX}
 		<div
 			class="card-boundary-line start"
+			class:active={activeResizeEdge === 'left'}
 			style="left: {startScreenX}px;"
 		>
 			<div class="date-label">{selectedCard.startDate}</div>
@@ -120,6 +123,7 @@
 		</div>
 		<div
 			class="card-boundary-line end"
+			class:active={activeResizeEdge === 'right'}
 			style="left: {endScreenX}px;"
 		>
 			<div class="date-label">{selectedCard.endDate}</div>
@@ -244,5 +248,17 @@
 	.card-boundary-line.end .date-label {
 		left: 8px;
 		right: auto;
+	}
+
+	/* Active state - accent color for the edge being resized */
+	.card-boundary-line.active .vertical-bar {
+		background-color: var(--interactive-accent);
+		opacity: 1;
+	}
+
+	.card-boundary-line.active .date-label {
+		background: var(--interactive-accent);
+		color: var(--text-on-accent);
+		border-color: var(--interactive-accent);
 	}
 </style>

@@ -18,9 +18,13 @@
 		onClick?: () => void;
 		onSelect?: () => void;
 		onUpdateSelection?: (startX: number, endX: number, startDate: string, endDate: string) => void;
+		onDragStart?: () => void;
+		onDragEnd?: () => void;
+		onResizeStart?: (edge: 'left' | 'right') => void;
+		onResizeEnd?: () => void;
 	}
 
-	let { x, y, width, title, scale, timeScale, translateX, layer, color, isSelected = false, onResize, onMove, onLayerChange, onClick, onSelect, onUpdateSelection }: Props = $props();
+	let { x, y, width, title, scale, timeScale, translateX, layer, color, isSelected = false, onResize, onMove, onLayerChange, onClick, onSelect, onUpdateSelection, onDragStart, onDragEnd, onResizeStart, onResizeEnd }: Props = $props();
 
 	const GRID_SPACING = 50;
 	const START_DATE = new Date('1970-01-01');
@@ -106,6 +110,11 @@
 			dragThresholdMet = true;
 			isMoving = true;
 			console.log('Move started - drag threshold met');
+			
+			// Notify parent that drag has started
+			if (onDragStart) {
+				onDragStart();
+			}
 			
 			// Select the card immediately when move starts
 			if (onSelect) {
@@ -216,6 +225,11 @@
 			
 			console.log('Resize start:', { edge: resizeEdge, x: displayX, width: displayWidth, scale });
 			
+			// Notify parent that resize has started (with edge info)
+			if (onResizeStart && resizeEdge) {
+				onResizeStart(resizeEdge);
+			}
+			
 			// Select the card immediately when resize starts
 			if (onSelect) {
 				onSelect();
@@ -261,6 +275,11 @@
 			onResize(displayX, displayWidth, true);
 		}
 		
+		// Notify parent that resize has ended
+		if (isResizing && onResizeEnd) {
+			onResizeEnd();
+		}
+		
 		// Check if we have a layer change
 		const hasLayerChange = isMoving && targetLayer !== null && targetLayer !== layer;
 		
@@ -273,6 +292,11 @@
 			// Regular move (same layer) - only position changed
 			console.log('Move finished:', { x: displayX, y: snappedY() });
 			onMove(displayX, snappedY(), true);
+		}
+		
+		// Notify parent that drag has ended
+		if (isMoving && onDragEnd) {
+			onDragEnd();
 		}
 		
 		// Reset ghost state

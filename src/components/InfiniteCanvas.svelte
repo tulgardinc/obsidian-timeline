@@ -44,6 +44,10 @@
 	let isPanning = $state(false);
 	let lastMouseX = $state(0);
 	let lastMouseY = $state(0);
+	let panStartX = $state(0);
+	let panStartY = $state(0);
+	let totalPanDelta = $state(0);
+	const PAN_THRESHOLD = 5; // pixels - movement above this is considered a pan, not a click
 
 	// Touch state for pinch zoom
 	let lastTouchDistance = $state(0);
@@ -60,9 +64,12 @@
 		onTimeScaleChange?: (timeScale: number) => void;
 		selectedCard?: CardHoverData | null;
 		onCanvasClick?: () => void;
+		isAnyCardDragging?: boolean;
+		isAnyCardResizing?: boolean;
+		activeResizeEdge?: 'left' | 'right' | null;
 	}
 
-	let { children, onScaleChange, onTimeScaleChange, selectedCard = null, onCanvasClick }: Props = $props();
+	let { children, onScaleChange, onTimeScaleChange, selectedCard = null, onCanvasClick, isAnyCardDragging = false, isAnyCardResizing = false, activeResizeEdge = null }: Props = $props();
 
 	// Notify parent of scale changes
 	$effect(() => {
@@ -236,6 +243,9 @@
 		const deltaX = event.clientX - lastMouseX;
 		const deltaY = event.clientY - lastMouseY;
 		
+		// Track total movement to distinguish click from pan
+		totalPanDelta += Math.abs(deltaX) + Math.abs(deltaY);
+		
 		translateX += deltaX;
 		translateY += deltaY;
 		
@@ -246,6 +256,9 @@
 	function handleMouseDown(event: MouseEvent) {
 		if (event.button !== 0) return; // Only left click
 		isPanning = true;
+		panStartX = event.clientX;
+		panStartY = event.clientY;
+		totalPanDelta = 0;
 		lastMouseX = event.clientX;
 		lastMouseY = event.clientY;
 	}
@@ -385,15 +398,20 @@
 	class="viewport"
 	bind:this={viewportRef}
 	class:panning={isPanning}
-	role="application"
-	aria-label="Timeline canvas"
-	onwheel={handleWheel}
-	onmousedown={handleMouseDown}
-	onmousemove={handleMouseMove}
-	onmouseup={handleMouseUp}
-	onmouseleave={handleMouseLeave}
-	onmouseenter={handleMouseEnter}
-	onclick={onCanvasClick}
+		role="application"
+		aria-label="Timeline canvas"
+		onwheel={handleWheel}
+		onmousedown={handleMouseDown}
+		onmousemove={handleMouseMove}
+		onmouseup={handleMouseUp}
+		onmouseleave={handleMouseLeave}
+		onmouseenter={handleMouseEnter}
+		onclick={() => {
+			// Only treat as click if we didn't pan significantly
+			if (totalPanDelta < PAN_THRESHOLD && onCanvasClick) {
+				onCanvasClick();
+			}
+		}}
 >
 	<TimelineHeader
 		scale={scale}
@@ -403,10 +421,13 @@
 		mouseX={mouseX}
 		isHovering={isHovering}
 		selectedCard={selectedCard}
+		isAnyCardResizing={isAnyCardResizing}
+		activeResizeEdge={activeResizeEdge}
 	/>
 	
 	<!-- Dashed cursor line spanning full viewport height -->
-	{#if cursorScreenX() !== null && selectedCard === null}
+	<!-- Hide cursor line when dragging or resizing a card -->
+	{#if cursorScreenX() !== null && !isAnyCardDragging && !isAnyCardResizing}
 		{@const screenX = cursorScreenX()}
 		{#if screenX !== null}
 			<div
@@ -422,10 +443,12 @@
 		{@const endScreenX = selectedCard.endX * scale + translateX}
 		<div
 			class="card-boundary-line start"
+			class:active={activeResizeEdge === 'left'}
 			style="left: {startScreenX}px;"
 		></div>
 		<div
 			class="card-boundary-line end"
+			class:active={activeResizeEdge === 'right'}
 			style="left: {endScreenX}px;"
 		></div>
 	{/if}
@@ -549,5 +572,17 @@
 		pointer-events: none;
 		z-index: 1;
 		transform: translateX(-1px);
+	}
+
+	.card-boundary-line.active {
+		border-image: repeating-linear-gradient(
+			to bottom,
+			var(--interactive-accent) 0px,
+			var(--interactive-accent) 8px,
+			transparent 8px,
+			transparent 14px
+		) 1;
+		opacity: 0.8;
+		z-index: 2;
 	}
 </style>
