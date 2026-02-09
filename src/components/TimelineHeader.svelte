@@ -38,6 +38,12 @@
 		return TimeScaleManager.getScaleLevel(timeScale, scale);
 	});
 
+	// Get current scale unit name (e.g., "Day", "Week", "Month", "Year", "Decade", etc.)
+	let currentUnitName = $derived(() => {
+		const info = TimeScaleManager.getScaleInfo(scaleLevel());
+		return info.unitName;
+	});
+
 	// Calculate visible markers using the scale manager
 	let visibleMarkers = $derived(() => {
 		const level = scaleLevel();
@@ -68,6 +74,9 @@
 
 <div class="timeline-container">
 	<div class="timeline-layer">
+		<!-- Scale unit indicator - behind markers at top-left -->
+		<div class="scale-unit-label">{currentUnitName()}</div>
+		
 		<!-- Dynamic markers based on scale level -->
 		{#each visibleMarkers() as marker (marker.unitIndex)}
 			<div
@@ -248,5 +257,20 @@
 		background: var(--interactive-accent);
 		color: var(--text-on-accent);
 		border-color: var(--interactive-accent);
+	}
+
+	/* Scale unit label - behind markers at top-left */
+	.scale-unit-label {
+		position: absolute;
+		top: 2px;
+		left: 8px;
+		font-size: 12px;
+		font-family: var(--font-monospace);
+		color: var(--text-muted);
+		opacity: 0.6;
+		text-transform: capitalize;
+		z-index: 0;
+		pointer-events: none;
+		user-select: none;
 	}
 </style>
