@@ -59,12 +59,13 @@ export class CardCameraRenderer {
     const screenRight = screenX + screenWidth;
 
     // Check visibility - card is visible if any part overlaps with viewport
+    // and width is at least 15px (to account for borders and padding)
     const isVisible = !(
       screenRight < 0 ||
       screenX > viewport.width ||
       screenY + card.height * viewport.scale < 0 ||
       screenY > viewport.height
-    );
+    ) && screenWidth >= 15;
 
     if (!isVisible) {
       return {

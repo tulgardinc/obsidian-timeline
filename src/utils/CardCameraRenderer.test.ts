@@ -400,7 +400,7 @@ describe('CardCameraRenderer', () => {
       const render = CardCameraRenderer.calculateRenderData(card, viewport);
       
       expect(render.width).toBe(0);
-      expect(render.visible).toBe(true);
+      expect(render.visible).toBe(false); // Cards with width < 15px are not visible
     });
 
     it('should handle zero scale', () => {

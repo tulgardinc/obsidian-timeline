@@ -110,10 +110,6 @@
 	let dragStartWidth = $state(0);
 	let dragThresholdMet = $state(false);
 
-	// Ghost/Preview state for layer dragging
-	let targetLayer = $state<number | null>(null);
-	let showGhost = $state(false);
-
 	let cardRef: HTMLDivElement;
 
 	// Calculate layer from Y position
@@ -176,11 +172,10 @@
 				const snappedEndDay = TimeScaleManager.snapToNearestMarker(Math.round(targetEndDay), scaleLevel());
 				// Convert back to world coordinate
 				const snappedEndX = TimeScaleManager.dayToWorldX(snappedEndDay, timeScale);
-				// Calculate new width (ensure minimum 1 day)
+				// Calculate new width (no minimum constraint)
 				let newWidth = snappedEndX - dragStartX;
-				const minWidth = TimeScaleManager.dayToWorldX(1, timeScale);
-				if (newWidth < minWidth) {
-					newWidth = minWidth;
+				if (newWidth < 0) {
+					newWidth = 0;
 				}
 				
 				// Update local display state directly
@@ -206,10 +201,8 @@
 				// Calculate new width based on snapped start (keeping end position fixed)
 				const endX = dragStartX + dragStartWidth;
 				let newWidth = endX - snappedStartX;
-				const minWidth = TimeScaleManager.dayToWorldX(1, timeScale);
-				if (newWidth < minWidth) {
-					// If would be too small, push the end instead
-					newWidth = minWidth;
+				if (newWidth < 0) {
+					newWidth = 0;
 				}
 				const newX = endX - newWidth;
 				
@@ -243,10 +236,6 @@
 			let newY = dragStartY + worldDeltaY;
 			let calculatedLayer = yToLayer(newY);
 			let newSnappedY = layerToY(calculatedLayer);
-			
-			// Update ghost preview
-			targetLayer = calculatedLayer;
-			showGhost = true;
 			
 			// Update local display state directly
 			displayX = newX;
@@ -328,15 +317,7 @@
 			onResizeEnd();
 		}
 		
-		// Check if we have a layer change
-		const hasLayerChange = isMoving && targetLayer !== null && targetLayer !== layer;
-		
-		if (hasLayerChange && onLayerChange) {
-			// Layer change handles both position AND layer atomically
-			// Safe to use non-null assertion because we checked targetLayer !== null above
-			onLayerChange(targetLayer!, displayX, displayWidth, true);
-		} else if (isMoving && onMove) {
-			// Regular move (same layer) - only position changed
+		if (isMoving && onMove) {
 			onMove(displayX, snappedY(), true);
 		}
 		
@@ -344,10 +325,6 @@
 		if (isMoving && onDragEnd) {
 			onDragEnd();
 		}
-		
-		// Reset ghost state
-		showGhost = false;
-		targetLayer = null;
 		
 		isResizing = false;
 		isMoving = false;
@@ -405,21 +382,8 @@
 	});
 </script>
 
-<!-- Ghost element showing target layer position -->
-{#if showGhost && targetLayer !== null}
-	<div
-		class="timeline-card ghost"
-		style="left: {displayX}px; top: {layerToY(targetLayer)}px; width: {displayWidth}px;"
-		aria-hidden="true"
-	>
-		<div class="card-content">
-			<h3>{title}</h3>
-		</div>
-	</div>
-{/if}
-
-<!-- Only render if card is at least partially visible in viewport -->
-{#if !isCompletelyOutside()}
+<!-- Only render if card is at least partially visible in viewport and width >= 15px -->
+{#if !isCompletelyOutside() && visualWidth() >= 15}
 	<div
 		class="timeline-card"
 		class:color-red={color === 'red'}
@@ -486,7 +450,7 @@
 		border: 2px solid var(--color-base-40);
 		border-radius: 4px;
 		padding: 4px 4px;
-		min-width: 50px;
+		min-width: 0;
 		height: 50px; /* Exact grid spacing */
 		box-sizing: border-box;
 		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -545,15 +509,6 @@
 		box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
 		z-index: 20;
 		opacity: 0.8;
-	}
-
-	.timeline-card.ghost {
-		background: var(--interactive-accent);
-		border: 2px dashed var(--interactive-accent-hover);
-		opacity: 0.5;
-		z-index: 5;
-		pointer-events: none;
-		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 	}
 
 	.timeline-card.selected {
