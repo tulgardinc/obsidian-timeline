@@ -19,12 +19,14 @@
 		onItemMove: (index: number, newX: number, newY: number) => void;
 		onItemLayerChange: (index: number, newLayer: number, newX: number, newWidth: number) => void;
 		onItemClick: (index: number) => void;
+		onItemSelect: (index: number) => void;
+		onUpdateSelectionData: (startX: number, endX: number, startDate: string, endDate: string) => void;
 		onCanvasClick?: () => void;
 		// Callback to refresh items from parent
 		onRefreshItems?: () => TimelineItem[];
 	}
 
-	let { items: initialItems, selectedIndex: initialSelectedIndex = null, selectedCard: initialSelectedCard = null, onItemResize, onItemMove, onItemLayerChange, onItemClick, onCanvasClick, onRefreshItems }: Props = $props();
+	let { items: initialItems, selectedIndex: initialSelectedIndex = null, selectedCard: initialSelectedCard = null, onItemResize, onItemMove, onItemLayerChange, onItemClick, onItemSelect, onUpdateSelectionData, onCanvasClick, onRefreshItems }: Props = $props();
 
 	// Create local reactive state from props for optimistic updates during drag/resize
 	let items = $state<TimelineItem[]>([...initialItems]);
@@ -134,6 +136,8 @@
 				onMove={(newX, newY, finished) => handleMove(index, newX, newY, finished)}
 				onLayerChange={(newLayer, newX, newWidth, finished) => handleLayerChange(index, newLayer, newX, newWidth, finished)}
 				onClick={() => onItemClick(index)}
+				onSelect={() => onItemSelect(index)}
+				onUpdateSelection={(startX, endX, startDate, endDate) => onUpdateSelectionData(startX, endX, startDate, endDate)}
 			/>
 		{/each}
 	</InfiniteCanvas>

@@ -15,9 +15,11 @@
 		onMove?: (newX: number, newY: number, finished: boolean) => void;
 		onLayerChange?: (newLayer: number, newX: number, newWidth: number, finished: boolean) => void;
 		onClick?: () => void;
+		onSelect?: () => void;
+		onUpdateSelection?: (startX: number, endX: number, startDate: string, endDate: string) => void;
 	}
 
-	let { x, y, width, title, scale, translateX, layer, color, isSelected = false, onResize, onMove, onLayerChange, onClick }: Props = $props();
+	let { x, y, width, title, scale, translateX, layer, color, isSelected = false, onResize, onMove, onLayerChange, onClick, onSelect, onUpdateSelection }: Props = $props();
 
 	const GRID_SPACING = 50;
 	const PIXELS_PER_DAY = 10;
@@ -84,6 +86,17 @@
 		return `${day}/${month}/${year}`;
 	}
 
+	// Update selection boundary data during drag/resize
+	function updateSelectionData() {
+		if (isSelected && onUpdateSelection) {
+			const startX = displayX;
+			const endX = displayX + displayWidth;
+			const startDate = xToDate(startX);
+			const endDate = xToDate(endX);
+			onUpdateSelection(startX, endX, startDate, endDate);
+		}
+	}
+
 	function handleMouseMove(event: MouseEvent) {
 		// Check if we should start moving (threshold: 3 pixels)
 		if (isMouseDown && !isMoving && !dragThresholdMet && 
@@ -91,6 +104,11 @@
 			dragThresholdMet = true;
 			isMoving = true;
 			console.log('Move started - drag threshold met');
+			
+			// Select the card immediately when move starts
+			if (onSelect) {
+				onSelect();
+			}
 		}
 		
 		if (isResizing) {
@@ -114,6 +132,9 @@
 				if (onResize) {
 					onResize(dragStartX, newWidth, false);
 				}
+				
+				// Update selection data so indicators follow the card
+				updateSelectionData();
 			} else if (resizeEdge === 'left') {
 				// Left edge: change position and width
 				let newWidth = dragStartWidth - worldDelta;
@@ -136,6 +157,9 @@
 				if (onResize) {
 					onResize(newX, newWidth, false);
 				}
+				
+				// Update selection data so indicators follow the card
+				updateSelectionData();
 			}
 		} else if (isMoving) {
 			// Move entire card
@@ -169,6 +193,9 @@
 			if (onMove) {
 				onMove(newX, newSnappedY, false);
 			}
+			
+			// Update selection data so indicators follow the card
+			updateSelectionData();
 		}
 	}
 
@@ -186,6 +213,11 @@
 			dragStartWidth = displayWidth; // Use local display state
 			
 			console.log('Resize start:', { edge: resizeEdge, x: displayX, width: displayWidth, scale });
+			
+			// Select the card immediately when resize starts
+			if (onSelect) {
+				onSelect();
+			}
 			
 			// Add global listeners
 			window.addEventListener('mousemove', handleWindowMouseMove);

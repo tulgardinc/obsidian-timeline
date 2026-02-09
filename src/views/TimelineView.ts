@@ -633,6 +633,54 @@ export class TimelineView extends ItemView {
 	}
 
 	/**
+	 * Select a card (without toggling - always select)
+	 */
+	private selectCard(index: number): void {
+		console.log('TimelineView: selectCard CALLED for index:', index, 'current:', this.selectedIndex);
+		
+		// If already selected, do nothing
+		if (this.selectedIndex === index) {
+			console.log('TimelineView: Card already selected, no change needed');
+			return;
+		}
+		
+		// Select the card
+		this.selectedIndex = index;
+		
+		// Calculate and store boundary data for the selected card
+		if (index >= 0 && index < this.timelineItems.length) {
+			const item = this.timelineItems[index]!;
+			const PIXELS_PER_DAY = 10;
+			const START_DATE = new Date('1970-01-01');
+			
+			// Calculate dates from positions
+			const daysStart = Math.round(item.x / PIXELS_PER_DAY);
+			const dateStart = new Date(START_DATE.getTime() + daysStart * 24 * 60 * 60 * 1000);
+			const dayStart = dateStart.getDate().toString().padStart(2, '0');
+			const monthStart = (dateStart.getMonth() + 1).toString().padStart(2, '0');
+			const yearStart = dateStart.getFullYear();
+			
+			const daysEnd = Math.round((item.x + item.width) / PIXELS_PER_DAY);
+			const dateEnd = new Date(START_DATE.getTime() + daysEnd * 24 * 60 * 60 * 1000);
+			const dayEnd = dateEnd.getDate().toString().padStart(2, '0');
+			const monthEnd = (dateEnd.getMonth() + 1).toString().padStart(2, '0');
+			const yearEnd = dateEnd.getFullYear();
+			
+			this.selectedCardData = {
+				startX: item.x,
+				endX: item.x + item.width,
+				startDate: `${dayStart}/${monthStart}/${yearStart}`,
+				endDate: `${dayEnd}/${monthEnd}/${yearEnd}`,
+				title: item.title
+			};
+			console.log('TimelineView: selectedCardData calculated:', this.selectedCardData);
+		}
+		
+		// Update the component with new selection state
+		this.updateSelectionInComponent();
+	}
+
+	/**
 	 * Toggle selection of a card (select if not selected, deselect if already selected)
 	 */
 	private toggleSelection(index: number): void {
@@ -753,6 +801,26 @@ export class TimelineView extends ItemView {
 						// Toggle selection and open file
 						this.toggleSelection(index);
 						this.openFile(index);
+					},
+					onItemSelect: (index: number) => {
+						// Select the card after move/resize (do not open file)
+						this.selectCard(index);
+					},
+					onUpdateSelectionData: (startX: number, endX: number, startDate: string, endDate: string) => {
+						// Update selection data during drag/resize so indicators follow the card
+						if (this.selectedIndex !== null && this.selectedCardData) {
+							this.selectedCardData = {
+								...this.selectedCardData,
+								startX,
+								endX,
+								startDate,
+								endDate
+							};
+							// Update the component immediately
+							if (this.component && this.component.setSelection) {
+								this.component.setSelection(this.selectedIndex, this.selectedCardData);
+							}
+						}
 					},
 					onCanvasClick: () => {
 						this.clearSelection();
