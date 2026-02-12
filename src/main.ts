@@ -72,6 +72,30 @@ export default class MyPlugin extends Plugin {
 			}
 		});
 
+		// Add command to view current note in timeline (fit to view)
+		this.addCommand({
+			id: 'view-in-timeline',
+			name: 'View in Timeline',
+			editorCallback: async (_editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+				// Get the file from the context
+				const file = ctx.file;
+				if (!file) return;
+
+				// First, ensure the timeline view is open
+				await this.openTimelineView();
+
+				// Get the timeline view instance
+				const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_TIMELINE);
+				if (leaves.length === 0) return;
+
+				const timelineView = leaves[0]?.view as TimelineView;
+				if (!timelineView) return;
+
+				// Call fit to view for this file
+				timelineView.fitToCardByPath(file.path);
+			}
+		});
+
 		// Original sample commands
 		this.addCommand({
 			id: 'open-modal-simple',

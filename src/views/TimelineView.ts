@@ -866,6 +866,29 @@ export class TimelineView extends ItemView {
 	}
 
 	/**
+	 * Fit timeline view to show the card for a specific file path
+	 * Opens/focuses timeline and zooms to fit the card edge-to-edge
+	 */
+	fitToCardByPath(filePath: string): void {
+		// Find the item in the timeline
+		const index = this.timelineItems.findIndex(i => i.file.path === filePath);
+		if (index === -1) {
+			// File is not a timeline item - do nothing as per requirements
+			return;
+		}
+
+		const item = this.timelineItems[index]!;
+
+		// Select the card
+		this.selectCard(index);
+
+		// Use the component's fitCardWidth method to zoom to fit
+		if (this.component && 'fitCardWidth' in this.component) {
+			(this.component as { fitCardWidth: (x: number, width: number) => void }).fitCardWidth(item.x, item.width);
+		}
+	}
+
+	/**
 	 * Update the Svelte component with current selection state
 	 */
 	private updateSelectionInComponent(): void {
