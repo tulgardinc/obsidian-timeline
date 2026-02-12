@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { TFile } from "obsidian";
 	import type { TimelineItem } from "../stores/timelineStore";
 	import InfiniteCanvas from "./InfiniteCanvas.svelte";
 	import TimelineCard from "./TimelineCard.svelte";
@@ -18,16 +19,18 @@
 		onItemResize: (index: number, newX: number, newWidth: number) => void;
 		onItemMove: (index: number, newX: number, newY: number) => void;
 		onItemLayerChange: (index: number, newLayer: number, newX: number, newWidth: number) => void;
-		onItemClick: (index: number) => void;
+		onItemClick: (index: number, event: MouseEvent) => void;
 		onItemSelect: (index: number) => void;
 		onUpdateSelectionData: (startX: number, endX: number, startDate: string, endDate: string) => void;
 		onTimeScaleChange: (timeScale: number) => void;
 		onCanvasClick?: () => void;
 		// Callback to refresh items from parent
 		onRefreshItems?: () => TimelineItem[];
+		// Callback for context menu - parent uses Obsidian Menu API
+		onItemContextMenu?: (index: number, event: MouseEvent) => void;
 	}
 
-	let { items: initialItems, selectedIndex: initialSelectedIndex = null, selectedCard: initialSelectedCard = null, onItemResize, onItemMove, onItemLayerChange, onItemClick, onItemSelect, onUpdateSelectionData, onTimeScaleChange, onCanvasClick, onRefreshItems }: Props = $props();
+	let { items: initialItems, selectedIndex: initialSelectedIndex = null, selectedCard: initialSelectedCard = null, onItemResize, onItemMove, onItemLayerChange, onItemClick, onItemSelect, onUpdateSelectionData, onTimeScaleChange, onCanvasClick, onRefreshItems, onItemContextMenu }: Props = $props();
 
 	// Create local reactive state from props for optimistic updates during drag/resize
 	let items = $state<TimelineItem[]>([...initialItems]);
@@ -47,10 +50,39 @@
 		selectedCard = cardData;
 	}
 
+	// Export a function to center the viewport on a specific item
+	export function centerOnItem(index: number) {
+		if (index >= 0 && index < items.length) {
+			const item = items[index];
+			if (item && infiniteCanvasRef) {
+				// Center on the middle of the card
+				infiniteCanvasRef.centerOn(item.x + item.width / 2, item.y);
+			}
+		}
+	}
+
+	// Export a function to get the center time (days from epoch)
+	export function getCenterTime(): number | null {
+		return infiniteCanvasRef?.getCenterTime() ?? null;
+	}
+
+	// Export a function to center on a specific time (days from epoch)
+	export function centerOnTime(days: number) {
+		infiniteCanvasRef?.centerOnTime(days);
+	}
+
+	// Export a function to fit a card width to the viewport (edge-to-edge)
+	export function fitCardWidth(cardStartX: number, cardWidth: number) {
+		infiniteCanvasRef?.fitCardWidth(cardStartX, cardWidth);
+	}
+
 	// Track if any card is being dragged or resized
 	let isAnyCardDragging = $state(false);
 	let isAnyCardResizing = $state(false);
 	let activeResizeEdge = $state<'left' | 'right' | null>(null);
+
+	// Reference to InfiniteCanvas for viewport control
+	let infiniteCanvasRef: InfiniteCanvas;
 
 	function handleTimeScaleChange(timeScale: number) {
 		// Notify parent to recalculate items with new time scale
@@ -131,10 +163,19 @@
 			onItemLayerChange(index, newLayer, newX, newWidth);
 		}
 	}
+
+	/**
+	 * Handle context menu on card
+	 * Passes event to parent which uses Obsidian Menu API
+	 */
+	function handleContextMenu(index: number, event: MouseEvent) {
+		onItemContextMenu?.(index, event);
+	}
 </script>
 
 <div class="timeline-view" tabindex="-1">
-		<InfiniteCanvas 
+		<InfiniteCanvas
+			bind:this={infiniteCanvasRef}
 			onTimeScaleChange={handleTimeScaleChange}
 			selectedCard={selectedCard}
 			onCanvasClick={handleCanvasClick}
@@ -152,17 +193,18 @@
 					layer={item.layer ?? 0}
 					color={item.color}
 					isSelected={isCardSelected}
-					onResize={(newX, newWidth, finished) => handleResize(index, newX, newWidth, finished)}
-					onMove={(newX, newY, finished) => handleMove(index, newX, newY, finished)}
-					onLayerChange={(newLayer, newX, newWidth, finished) => handleLayerChange(index, newLayer, newX, newWidth, finished)}
-					onClick={() => onItemClick(index)}
-					onSelect={() => onItemSelect(index)}
-					onUpdateSelection={(startX, endX, startDate, endDate) => onUpdateSelectionData(startX, endX, startDate, endDate)}
-					onDragStart={handleDragStart}
-					onDragEnd={handleDragEnd}
-					onResizeStart={handleResizeStart}
-					onResizeEnd={handleResizeEnd}
-				/>
+				onResize={(newX, newWidth, finished) => handleResize(index, newX, newWidth, finished)}
+				onMove={(newX, newY, finished) => handleMove(index, newX, newY, finished)}
+				onLayerChange={(newLayer, newX, newWidth, finished) => handleLayerChange(index, newLayer, newX, newWidth, finished)}
+				onClick={(event) => onItemClick(index, event)}
+				onSelect={() => onItemSelect(index)}
+				onUpdateSelection={(startX, endX, startDate, endDate) => onUpdateSelectionData(startX, endX, startDate, endDate)}
+				onDragStart={handleDragStart}
+				onDragEnd={handleDragEnd}
+				onResizeStart={handleResizeStart}
+				onResizeEnd={handleResizeEnd}
+				onContextMenu={(event) => handleContextMenu(index, event)}
+			/>
 			{/each}
 		</InfiniteCanvas>
 </div>

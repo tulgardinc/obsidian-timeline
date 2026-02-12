@@ -2,7 +2,8 @@
 	import { onMount } from "svelte";
 	import GridLines from "./GridLines.svelte";
 	import TimelineHeader from "./TimelineHeader.svelte";
-	import { setViewportContext, type ViewportState } from "../contexts/ViewportContext";
+	import { setViewportContext } from "../contexts/ViewportContext";
+	import { TimeScaleManager } from "../utils/TimeScaleManager";
 
 	interface CardHoverData {
 		startX: number;
@@ -15,14 +16,11 @@
 	const PIXELS_PER_DAY = 10;
 
 	// Calculate cursor screen X position for the dashed line
+	// X-axis: screenX = worldX + translateX (no scale)
+	// Since mouseX is already in screen space, just return it
 	let cursorScreenX = $derived(() => {
 		if (mouseX === null || !isHovering) return null;
-		
-		// Convert mouse X to world coordinates
-		const worldX = (mouseX - translateX) / scale;
-		// Convert back to screen coordinates
-		const screenX = worldX * scale + translateX;
-		return screenX;
+		return mouseX;
 	});
 
 	// Transform state
@@ -169,19 +167,16 @@
 				const centerX = rect.width / 2;
 				const centerY = rect.height / 2;
 				
-				// Calculate world coordinates before zoom
-				// World coordinates are based on the old scale/timeScale
-				const worldX = (centerX - translateX) / scale;
-				const worldCenterTime = (centerX - translateX) / timeScale;
+				// Calculate world coordinates before zoom using centralized utilities
+				const worldCenterTime = TimeScaleManager.screenXToDay(centerX, timeScale, translateX);
 				const worldY = (centerY - translateY) / scale;
 				
 				// Apply new scale values
 				scale = newScale;
 				timeScale = newTimeScale;
 				
-				// Adjust translation to keep center stable
-				// X translation keeps the same world time position
-				translateX = centerX - worldCenterTime * timeScale;
+				// Adjust translation to keep center stable using centralized utilities
+				translateX = centerX - TimeScaleManager.dayToWorldX(worldCenterTime, timeScale);
 				translateY = centerY - worldY * scale;
 				
 				// Trigger crisp render after zoom
@@ -196,14 +191,14 @@
 				const rect = viewportRef.getBoundingClientRect();
 				const zoomCenterX = mouseX !== null ? mouseX : rect.width / 2;
 				
-				// Calculate world time coordinate at zoom center before zoom
-				const worldCenterTime = (zoomCenterX - translateX) / timeScale;
+				// Calculate world time coordinate at zoom center before zoom using centralized utilities
+				const worldCenterTime = TimeScaleManager.screenXToDay(zoomCenterX, timeScale, translateX);
 				
 				// Apply new time scale
 				timeScale = newTimeScale;
 				
 				// Adjust translation to keep zoom center over same world time
-				translateX = zoomCenterX - worldCenterTime * timeScale;
+				translateX = zoomCenterX - TimeScaleManager.dayToWorldX(worldCenterTime, timeScale);
 			} else {
 				// Two-finger scroll without modifier = Pan
 				translateX -= event.deltaX;
@@ -221,14 +216,14 @@
 				const rect = viewportRef.getBoundingClientRect();
 				const mouseXPos = event.clientX - rect.left;
 				
-				// Calculate world time coordinate at mouse position before zoom
-				const worldMouseTime = (mouseXPos - translateX) / timeScale;
+				// Calculate world time coordinate at mouse position before zoom using centralized utilities
+				const worldMouseTime = TimeScaleManager.screenXToDay(mouseXPos, timeScale, translateX);
 				
 				// Apply new time scale
 				timeScale = newTimeScale;
 				
 				// Adjust translation to keep mouse position over same world time
-				translateX = mouseXPos - worldMouseTime * timeScale;
+				translateX = mouseXPos - TimeScaleManager.dayToWorldX(worldMouseTime, timeScale);
 			} else {
 				// Mouse wheel alone = Unified zoom (scale + timeScale together to preserve aspect ratio)
 				const zoomFactor = 0.1;
@@ -244,18 +239,16 @@
 				const mouseXPos = event.clientX - rect.left;
 				const mouseYPos = event.clientY - rect.top;
 				
-				// Calculate world coordinates before zoom
-				const worldX = (mouseXPos - translateX) / scale;
-				const worldCenterTime = (mouseXPos - translateX) / timeScale;
+				// Calculate world coordinates before zoom using centralized utilities
+				const worldCenterTime = TimeScaleManager.screenXToDay(mouseXPos, timeScale, translateX);
 				const worldY = (mouseYPos - translateY) / scale;
 				
 				// Apply new scale values
 				scale = newScale;
 				timeScale = newTimeScale;
 				
-				// Adjust translation to keep mouse over same world point
-				// X translation keeps the same world time position
-				translateX = mouseXPos - worldCenterTime * timeScale;
+				// Adjust translation to keep mouse over same world point using centralized utilities
+				translateX = mouseXPos - TimeScaleManager.dayToWorldX(worldCenterTime, timeScale);
 				translateY = mouseYPos - worldY * scale;
 				
 				// Trigger crisp render after zoom
@@ -368,16 +361,16 @@
 			const centerX = (touch1.clientX + touch2.clientX) / 2 - rect.left;
 			const centerY = (touch1.clientY + touch2.clientY) / 2 - rect.top;
 			
-			// Calculate world coordinates before zoom
-			const worldCenterTime = (centerX - translateX) / timeScale;
+			// Calculate world coordinates before zoom using centralized utilities
+			const worldCenterTime = TimeScaleManager.screenXToDay(centerX, timeScale, translateX);
 			const worldY = (centerY - translateY) / scale;
 			
 			// Apply new scale values (both scale and timeScale together)
 			scale = scale * scaleFactor;
 			timeScale = timeScale * scaleFactor;
 			
-			// Adjust translation to keep center over same world time position
-			translateX = centerX - worldCenterTime * timeScale;
+			// Adjust translation to keep center over same world position using centralized utilities
+			translateX = centerX - TimeScaleManager.dayToWorldX(worldCenterTime, timeScale);
 			translateY = centerY - worldY * scale;
 			
 			lastTouchDistance = newDistance;
@@ -404,6 +397,64 @@
 			translateX = rect.width / 2;
 			translateY = rect.height / 2;
 		}
+	}
+
+	// Center the viewport on a specific world coordinate
+	export function centerOn(worldX: number, worldY: number) {
+		const rect = viewportRef?.getBoundingClientRect();
+		if (rect) {
+			// X: screenX = worldX + translateX, center means screenX = width/2
+			// So translateX = width/2 - worldX
+			translateX = TimeScaleManager.calculateTranslateXToCenterWorldX(worldX, rect.width);
+			// Y: screenY = worldY * scale + translateY, center means screenY = height/2
+			translateY = TimeScaleManager.calculateTranslateYToCenterWorldY(worldY, scale, rect.height);
+		}
+	}
+
+	// Get the time (in days from epoch) at the center of the viewport
+	export function getCenterTime(): number | null {
+		const rect = viewportRef?.getBoundingClientRect();
+		if (!rect) return null;
+		const centerX = rect.width / 2;
+		// Use centralized utility for screen->day conversion
+		return TimeScaleManager.screenXToDay(centerX, timeScale, translateX);
+	}
+
+	// Center the viewport on a specific time (days from epoch)
+	export function centerOnTime(days: number) {
+		const rect = viewportRef?.getBoundingClientRect();
+		if (rect) {
+			// Use centralized utility to calculate translation for centering
+			const worldX = TimeScaleManager.dayToWorldX(days, timeScale);
+			translateX = TimeScaleManager.calculateTranslateXToCenterWorldX(worldX, rect.width);
+		}
+	}
+
+	/**
+	 * Fit a card to fill the viewport width edge-to-edge
+	 * Adjusts timeScale to make the card width match viewport width
+	 * Centers horizontally on the card, but does not change Y position or Y scale
+	 */
+	export function fitCardWidth(cardStartX: number, cardWidth: number) {
+		const rect = viewportRef?.getBoundingClientRect();
+		if (!rect || cardWidth <= 0) return;
+
+		// Calculate the card's duration in days at the current timeScale
+		const cardStartDay = TimeScaleManager.worldXToDay(cardStartX, timeScale);
+		const cardEndDay = TimeScaleManager.worldXToDay(cardStartX + cardWidth, timeScale);
+		const cardDurationDays = cardEndDay - cardStartDay;
+
+		// Calculate new timeScale: viewportWidth pixels / cardDurationDays
+		// This makes the card fill the entire viewport width (edge to edge)
+		const newTimeScale = rect.width / cardDurationDays;
+
+		// Apply the new timeScale
+		timeScale = newTimeScale;
+
+		// Center horizontally on the card's center time
+		const cardCenterDay = cardStartDay + cardDurationDays / 2;
+		const centerWorldX = TimeScaleManager.dayToWorldX(cardCenterDay, timeScale);
+		translateX = TimeScaleManager.calculateTranslateXToCenterWorldX(centerWorldX, rect.width);
 	}
 
 	// Update viewport dimensions
@@ -461,7 +512,6 @@
 		}}
 >
 	<TimelineHeader
-		scale={scale}
 		timeScale={timeScale}
 		translateX={translateX}
 		viewportWidth={viewportWidth}
@@ -486,8 +536,8 @@
 	
 	<!-- Card boundary lines extending up to timeline for selected card -->
 	{#if selectedCard !== null}
-		{@const startScreenX = Math.round(selectedCard.startX * scale + translateX)}
-		{@const endScreenX = Math.round(selectedCard.endX * scale + translateX)}
+		{@const startScreenX = TimeScaleManager.worldXToScreenRounded(selectedCard.startX, translateX)}
+		{@const endScreenX = TimeScaleManager.worldXToScreenRounded(selectedCard.endX, translateX)}
 		<div
 			class="card-boundary-line start"
 			class:active={activeResizeEdge === 'left'}

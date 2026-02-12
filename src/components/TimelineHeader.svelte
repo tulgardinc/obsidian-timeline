@@ -10,7 +10,6 @@
 	}
 
 	interface Props {
-		scale: number;
 		timeScale: number;
 		translateX: number;
 		viewportWidth: number;
@@ -22,7 +21,6 @@
 	}
 
 	let { 
-		scale, 
 		timeScale, 
 		translateX, 
 		viewportWidth, 
@@ -33,9 +31,10 @@
 		activeResizeEdge = null 
 	}: Props = $props();
 
-	// Calculate current scale level based on effective density (timeScale * scale)
+	// Calculate current scale level based on timeScale pixel density
+	// (scale no longer affects X-axis)
 	let scaleLevel = $derived(() => {
-		return TimeScaleManager.getScaleLevel(timeScale, scale);
+		return TimeScaleManager.getScaleLevel(timeScale);
 	});
 
 	// Get current scale unit name (e.g., "Day", "Week", "Month", "Year", "Decade", etc.)
@@ -46,12 +45,12 @@
 	});
 
 	// Calculate visible markers using the scale manager
+	// No scale parameter needed - X-axis is not affected by scale
 	let visibleMarkers = $derived(() => {
 		const level = scaleLevel();
 		return TimeScaleManager.getVisibleMarkers(
 			level,
 			timeScale,
-			scale,
 			translateX,
 			viewportWidth
 		);
@@ -62,8 +61,8 @@
 		if (mouseX === null || !isHovering) return null;
 		
 		const level = scaleLevel();
-		// Use unified screen->day conversion (floored for hover display)
-		const day = Math.floor(TimeScaleManager.screenToDay(mouseX, timeScale, scale, translateX));
+		// Use unified screen->day conversion (no scale needed for X)
+		const day = Math.floor(TimeScaleManager.screenToDay(mouseX, timeScale, translateX));
 		
 		return {
 			day,
@@ -107,8 +106,8 @@
 	
 	<!-- Card boundary lines (when a card is selected) -->
 	{#if selectedCard !== null}
-		{@const startScreenX = Math.round(selectedCard.startX * scale + translateX)}
-		{@const endScreenX = Math.round(selectedCard.endX * scale + translateX)}
+		{@const startScreenX = TimeScaleManager.worldXToScreenRounded(selectedCard.startX, translateX)}
+		{@const endScreenX = TimeScaleManager.worldXToScreenRounded(selectedCard.endX, translateX)}
 		<div
 			class="card-boundary-line start"
 			class:active={activeResizeEdge === 'left'}

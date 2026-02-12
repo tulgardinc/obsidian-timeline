@@ -35,7 +35,7 @@ describe('CardCameraRenderer', () => {
       expect(render.visible).toBe(true);
     });
 
-    it('should apply scale to card dimensions', () => {
+    it('should apply scale to Y dimensions only', () => {
       const viewport: ViewportState = {
         width: VIEWPORT_WIDTH,
         height: VIEWPORT_HEIGHT,
@@ -53,9 +53,12 @@ describe('CardCameraRenderer', () => {
 
       const render = CardCameraRenderer.calculateRenderData(card, viewport);
       
-      expect(render.x).toBe(200); // 100 * 2
+      // X: no scale, worldX + translateX = 100
+      expect(render.x).toBe(100);
+      // Y: worldY * scale = 100 * 2 = 200
       expect(render.y).toBe(200);
-      expect(render.width).toBe(400); // 200 * 2
+      // Width: no scale on X
+      expect(render.width).toBe(200);
     });
   });
 
@@ -124,13 +127,14 @@ describe('CardCameraRenderer', () => {
     it('should handle zoom at extreme positions', () => {
       const extremeX = 10000000;
       
-      // Camera centered on extreme position with high zoom
+      // Camera centered on extreme position
+      // X: screenX = worldX + translateX, so translateX = 400 - extremeX (no scale on X)
       const viewport: ViewportState = {
         width: VIEWPORT_WIDTH,
         height: VIEWPORT_HEIGHT,
-        translateX: -extremeX * 10 + 400, // Account for scale
+        translateX: -extremeX + 400, // No scale on X
         translateY: 0,
-        scale: 10 // High zoom
+        scale: 10 // High zoom (only affects Y)
       };
 
       const card: CardWorldData = {
@@ -144,8 +148,8 @@ describe('CardCameraRenderer', () => {
       
       // Even with extreme position and high zoom, should be at viewport center
       expect(render.x).toBe(400);
-      expect(render.y).toBe(1000); // 100 * 10
-      expect(render.width).toBe(500); // 50 * 10
+      expect(render.y).toBe(1000); // 100 * 10 (scale affects Y)
+      expect(render.width).toBe(50); // No scale on X width
       
       // All coordinates should be within safe browser range
       expect(Math.abs(render.x)).toBeLessThan(1000000);
@@ -306,19 +310,20 @@ describe('CardCameraRenderer', () => {
       const billionYearsDays = 365000000000; // ~1 billion years in days
       const viewportCenterX = -billionYearsDays; // 1B years ago
       
+      // X: screenX = worldX + translateX, so translateX = 400 - worldX (no scale on X)
       const viewport: ViewportState = {
         width: VIEWPORT_WIDTH,
         height: VIEWPORT_HEIGHT,
-        translateX: -viewportCenterX * 0.1 + 400, // At timeScale=0.1
+        translateX: -viewportCenterX + 400, // No scale on X
         translateY: 0,
-        scale: 0.1 // Zoomed out to see large time spans
+        scale: 0.1 // Zoomed out (only affects Y)
       };
 
       // Card at 1 billion years ago
       const card: CardWorldData = {
         x: viewportCenterX,
         y: 0,
-        width: 1000, // 1000 days wide
+        width: 1000, // 1000 days wide (in world coordinates)
         height: 50
       };
 
@@ -335,18 +340,19 @@ describe('CardCameraRenderer', () => {
       const millionYearsDays = 36500000000;
       const viewportCenterX = -millionYearsDays;
       
+      // X: no scale on X, translateX = 400 - worldX
       const viewport: ViewportState = {
         width: VIEWPORT_WIDTH,
         height: VIEWPORT_HEIGHT,
-        translateX: -viewportCenterX * 10 + 400, // High zoom (scale=10)
+        translateX: -viewportCenterX + 400, // No scale on X
         translateY: 0,
-        scale: 10
+        scale: 10 // Only affects Y
       };
 
       const card: CardWorldData = {
         x: viewportCenterX,
         y: 0,
-        width: 30, // 30 days
+        width: 30, // 30 days (world coordinates)
         height: 50
       };
 
@@ -355,7 +361,7 @@ describe('CardCameraRenderer', () => {
       // Should still be visible within viewport
       expect(render.visible).toBe(true);
       expect(render.x).toBeCloseTo(400, 0);
-      expect(render.width).toBe(300); // 30 * 10
+      expect(render.width).toBe(30); // No scale on X width
     });
 
     it('should prevent coordinate overflow at browser limits', () => {
@@ -447,9 +453,12 @@ describe('CardCameraRenderer', () => {
 
       const render = CardCameraRenderer.calculateRenderData(card, viewport);
       
-      expect(render.x).toBe(-100);
+      // X: no scale, worldX + translateX = 100
+      expect(render.x).toBe(100);
+      // Y: worldY * scale = 100 * -1 = -100
       expect(render.y).toBe(-100);
-      expect(render.width).toBe(-200); // Negative width (flipped)
+      // Width: no scale on X
+      expect(render.width).toBe(200);
     });
   });
 });

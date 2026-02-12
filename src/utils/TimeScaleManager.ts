@@ -1,10 +1,36 @@
-// Time scale level definitions
-// Level 0: Days (small), Month starts (large)
-// Level 1: Months (small), Years (large)
-// Level 2: Years (small), Decades (large)
-// Level 3: Decades (small), Centuries (large)
-// Level 4: Centuries (small), Millennia (large)
-// Level 5+: Millennia and larger units
+/**
+ * TimeScaleManager - X-axis / Time Coordinate Utilities
+ * 
+ * This module handles all X-axis coordinate transformations related to time.
+ * It is the primary utility for converting between days, world X coordinates,
+ * and screen X coordinates.
+ * 
+ * Use TimeScaleManager for:
+ * - Day ↔ World X conversions (dayToWorldX, worldXToDay)
+ * - World X ↔ Screen X conversions (worldXToScreen, screenToWorldX)
+ * - Day ↔ Screen X conversions (dayToScreen, screenXToDay)
+ * - Time scale level detection and marker generation
+ * - Centering calculations for X-axis
+ * 
+ * Use CameraSystem (see CameraSystem.ts) for:
+ * - Full 2D viewport transformations (X and Y together)
+ * - Viewport visibility checks
+ * - Card rendering positions
+ * 
+ * Time scale level definitions:
+ * - Level 0: Days (small), Month starts (large)
+ * - Level 1: Months (small), Years (large)
+ * - Level 2: Years (small), Decades (large)
+ * - Level 3: Decades (small), Centuries (large)
+ * - Level 4: Centuries (small), Millennia (large)
+ * - Level 5+: Millennia and larger units
+ *
+ * COORDINATE SYSTEM:
+ * - X-axis: screenX = worldX + translateX  (NO scale multiplier)
+ *   where worldX = days * timeScale
+ * - Y-axis: screenY = worldY * scale + translateY
+ *   (scale only affects vertical zoom)
+ */
 
 import { TimelineDate } from "./TimelineDate";
 
@@ -40,18 +66,16 @@ const BASE_TIME_SCALES = [
 
 export class TimeScaleManager {
 	/**
-	 * Determine the appropriate scale level based on consistent marker spacing.
-	 * We want markers to be at least MIN_MARKER_SPACING pixels apart at all levels.
+	 * Determine the appropriate scale level based on marker spacing.
+	 * We want markers to be at least MIN_MARKER_SPACING pixels apart.
 	 * 
-	 * Calculation: pixelsPerDay = timeScale * scale
-	 * For a given level, the spacing between markers is:
-	 *   spacing = pixelsPerDay * daysPerUnit
-	 * 
-	 * We find the first level where spacing >= MIN_MARKER_SPACING
+	 * Since scale no longer affects X-axis, pixel density is just timeScale.
+	 * pixelsPerDay = timeScale
+	 * spacing = pixelsPerDay * daysPerUnit
 	 */
-	static getScaleLevel(timeScale: number, scale: number = 1): ScaleLevel {
-		// Calculate pixels per day at current zoom
-		const pixelsPerDay = timeScale * scale;
+	static getScaleLevel(timeScale: number): ScaleLevel {
+		// Calculate pixels per day at current zoom (scale no longer affects X)
+		const pixelsPerDay = timeScale;
 		
 		// Days per unit for each level
 		const daysPerUnit = [1, 30, 365, 3650, 36500];
@@ -153,20 +177,20 @@ export class TimeScaleManager {
 	
 	/**
 	 * Calculate visible markers for the current viewport
+	 * Note: scale is NOT used for X-axis calculations
 	 */
 	static getVisibleMarkers(
 		level: ScaleLevel,
 		timeScale: number,
-		scale: number,
 		translateX: number,
 		viewportWidth: number
 	): Marker[] {
 		const markers: Marker[] = [];
 		
-		// Calculate visible world coordinate range first (same space as cards)
-		// worldX = (screenX - translateX) / scale, but for viewport bounds:
-		const worldStartX = (-translateX) / scale;
-		const worldEndX = (-translateX + viewportWidth) / scale;
+		// Calculate visible world coordinate range
+		// screenX = worldX + translateX, so worldX = screenX - translateX
+		const worldStartX = -translateX;
+		const worldEndX = -translateX + viewportWidth;
 		
 		// Calculate visible day range from world coordinates
 		const startDay = Math.floor(worldStartX / timeScale);
@@ -175,16 +199,16 @@ export class TimeScaleManager {
 		let result: Marker[];
 		switch (level) {
 			case 0:
-				result = this.getDayMarkers(startDay, endDay, timeScale, scale, translateX, viewportWidth);
+				result = this.getDayMarkers(startDay, endDay, timeScale, translateX, viewportWidth);
 				break;
 			case 1:
-				result = this.getMonthMarkers(startDay, endDay, timeScale, scale, translateX, viewportWidth);
+				result = this.getMonthMarkers(startDay, endDay, timeScale, translateX, viewportWidth);
 				break;
 			case 2:
-				result = this.getYearMarkers(startDay, endDay, timeScale, scale, translateX, viewportWidth);
+				result = this.getYearMarkers(startDay, endDay, timeScale, translateX, viewportWidth);
 				break;
 			default:
-				result = this.getLargeUnitMarkers(level, startDay, endDay, timeScale, scale, translateX, viewportWidth);
+				result = this.getLargeUnitMarkers(level, startDay, endDay, timeScale, translateX, viewportWidth);
 		}
 		
 		return result;
@@ -197,7 +221,6 @@ export class TimeScaleManager {
 		startDay: number,
 		endDay: number,
 		timeScale: number,
-		scale: number,
 		translateX: number,
 		viewportWidth: number
 	): Marker[] {
@@ -205,7 +228,7 @@ export class TimeScaleManager {
 		
 		for (let day = startDay; day <= endDay; day++) {
 			const worldX = day * timeScale;
-			const screenX = worldX * scale + translateX;
+			const screenX = worldX + translateX;
 			
 			if (screenX >= -1 && screenX <= viewportWidth + 1) {
 				// Check if this day is the first day of a month
@@ -230,7 +253,6 @@ export class TimeScaleManager {
 		startDay: number,
 		endDay: number,
 		timeScale: number,
-		scale: number,
 		translateX: number,
 		viewportWidth: number
 	): Marker[] {
@@ -267,7 +289,7 @@ export class TimeScaleManager {
 			}
 			
 			const worldX = day * timeScale;
-			const screenX = worldX * scale + translateX;
+			const screenX = worldX + translateX;
 			
 			const inViewport = screenX >= -1 && screenX <= viewportWidth + 1;
 			
@@ -298,7 +320,6 @@ export class TimeScaleManager {
 		startDay: number,
 		endDay: number,
 		timeScale: number,
-		scale: number,
 		translateX: number,
 		viewportWidth: number
 	): Marker[] {
@@ -329,7 +350,7 @@ export class TimeScaleManager {
 			const day = yearDate.getDaysFromEpoch();
 			
 			const worldX = day * timeScale;
-			const screenX = worldX * scale + translateX;
+			const screenX = worldX + translateX;
 			
 			const inViewport = screenX >= -1 && screenX <= viewportWidth + 1;
 			
@@ -356,7 +377,6 @@ export class TimeScaleManager {
 		startDay: number,
 		endDay: number,
 		timeScale: number,
-		scale: number,
 		translateX: number,
 		viewportWidth: number
 	): Marker[] {
@@ -393,7 +413,7 @@ export class TimeScaleManager {
 			const day = unitDate.getDaysFromEpoch();
 			
 			const worldX = day * timeScale;
-			const screenX = worldX * scale + translateX;
+			const screenX = worldX + translateX;
 			
 			const inViewport = screenX >= -1 && screenX <= viewportWidth + 1;
 			
@@ -423,9 +443,11 @@ export class TimeScaleManager {
 	
 	/**
 	 * Get the day number at a given screen position
+	 * screenX = worldX + translateX, so worldX = screenX - translateX
+	 * worldX = day * timeScale, so day = worldX / timeScale
 	 */
-	static screenToDay(screenX: number, timeScale: number, scale: number, translateX: number): number {
-		const worldX = (screenX - translateX) / scale;
+	static screenToDay(screenX: number, timeScale: number, translateX: number): number {
+		const worldX = screenX - translateX;
 		return Math.floor(worldX / timeScale);
 	}
 	
@@ -462,6 +484,9 @@ export class TimeScaleManager {
 	// UNIFIED COORDINATE TRANSFORMATION FUNCTIONS
 	// All timeline coordinate calculations should go through these functions
 	// to ensure consistency across the application
+	//
+	// X-axis: screenX = worldX + translateX  (NO scale)
+	// Y-axis: screenY = worldY * scale + translateY
 	// ============================================================================
 	
 	/**
@@ -481,51 +506,51 @@ export class TimeScaleManager {
 	
 	/**
 	 * Calculate screen X coordinate from world X coordinate
-	 * Applies the zoom (scale) and pan (translateX) transform
+	 * X-axis uses only translateX for panning (no scale multiplier)
 	 */
-	static worldXToScreen(worldX: number, scale: number, translateX: number): number {
-		return worldX * scale + translateX;
+	static worldXToScreen(worldX: number, translateX: number): number {
+		return worldX + translateX;
 	}
 	
 	/**
 	 * Calculate screen X coordinate from day index
 	 * Combines day->world->screen conversion
 	 */
-	static dayToScreen(day: number, timeScale: number, scale: number, translateX: number): number {
+	static dayToScreen(day: number, timeScale: number, translateX: number): number {
 		const worldX = this.dayToWorldX(day, timeScale);
-		return this.worldXToScreen(worldX, scale, translateX);
+		return this.worldXToScreen(worldX, translateX);
 	}
 	
 	/**
 	 * Calculate world X coordinate from screen X coordinate
 	 * Inverse of worldXToScreen
 	 */
-	static screenToWorldX(screenX: number, scale: number, translateX: number): number {
-		return (screenX - translateX) / scale;
+	static screenToWorldX(screenX: number, translateX: number): number {
+		return screenX - translateX;
 	}
 	
 	/**
 	 * Calculate rounded screen X coordinate from world X coordinate
 	 * Use this for rendering elements that need pixel-perfect alignment
 	 */
-	static worldXToScreenRounded(worldX: number, scale: number, translateX: number): number {
-		return Math.round(this.worldXToScreen(worldX, scale, translateX));
+	static worldXToScreenRounded(worldX: number, translateX: number): number {
+		return Math.round(this.worldXToScreen(worldX, translateX));
 	}
 	
 	/**
 	 * Calculate rounded screen X coordinate from day index
 	 * Use this for rendering cards, markers, and boundary lines
 	 */
-	static dayToScreenRounded(day: number, timeScale: number, scale: number, translateX: number): number {
+	static dayToScreenRounded(day: number, timeScale: number, translateX: number): number {
 		const worldX = this.dayToWorldX(day, timeScale);
-		return this.worldXToScreenRounded(worldX, scale, translateX);
+		return this.worldXToScreenRounded(worldX, translateX);
 	}
 	
 	/**
 	 * Convert a screen X coordinate to a day index (for mouse interactions)
 	 */
-	static screenXToDay(screenX: number, timeScale: number, scale: number, translateX: number): number {
-		const worldX = this.screenToWorldX(screenX, scale, translateX);
+	static screenXToDay(screenX: number, timeScale: number, translateX: number): number {
+		const worldX = this.screenToWorldX(screenX, translateX);
 		return this.worldXToDay(worldX, timeScale);
 	}
 	
@@ -534,12 +559,11 @@ export class TimeScaleManager {
 	 * Returns [worldStartX, worldEndX]
 	 */
 	static getVisibleWorldRange(
-		scale: number,
 		translateX: number,
 		viewportWidth: number
 	): [number, number] {
-		const worldStartX = this.screenToWorldX(0, scale, translateX);
-		const worldEndX = this.screenToWorldX(viewportWidth, scale, translateX);
+		const worldStartX = this.screenToWorldX(0, translateX);
+		const worldEndX = this.screenToWorldX(viewportWidth, translateX);
 		return [worldStartX, worldEndX];
 	}
 	
@@ -549,13 +573,41 @@ export class TimeScaleManager {
 	 */
 	static getVisibleDayRange(
 		timeScale: number,
-		scale: number,
 		translateX: number,
 		viewportWidth: number
 	): [number, number] {
-		const [worldStartX, worldEndX] = this.getVisibleWorldRange(scale, translateX, viewportWidth);
+		const [worldStartX, worldEndX] = this.getVisibleWorldRange(translateX, viewportWidth);
 		const startDay = Math.floor(this.worldXToDay(worldStartX, timeScale));
 		const endDay = Math.ceil(this.worldXToDay(worldEndX, timeScale));
 		return [startDay, endDay];
+	}
+	
+	/**
+	 * Calculate the translation needed to center a world X coordinate in the viewport
+	 * Returns the new translateX value
+	 * 
+	 * Since screenX = worldX + translateX, to center:
+	 * worldX + translateX = viewportWidth / 2
+	 * translateX = viewportWidth / 2 - worldX
+	 */
+	static calculateTranslateXToCenterWorldX(
+		worldX: number,
+		viewportWidth: number
+	): number {
+		return viewportWidth / 2 - worldX;
+	}
+	
+	/**
+	 * Calculate the translation needed to center a world Y coordinate in the viewport
+	 * Returns the new translateY value
+	 */
+	static calculateTranslateYToCenterWorldY(
+		worldY: number,
+		scale: number,
+		viewportHeight: number
+	): number {
+		// To center: worldY * scale + translateY = viewportHeight / 2
+		// Solving for translateY: translateY = viewportHeight / 2 - worldY * scale
+		return viewportHeight / 2 - worldY * scale;
 	}
 }

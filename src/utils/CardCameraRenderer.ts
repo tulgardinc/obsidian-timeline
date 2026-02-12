@@ -20,6 +20,11 @@ export interface CardRenderData {
  * CardCameraRenderer handles the transformation of card world coordinates
  * to viewport-relative render coordinates.
  * 
+ * COORDINATE SYSTEM:
+ * X-axis: screenX = worldX + translateX  (NO scale - timeScale handles X density)
+ * Y-axis: screenY = worldY * scale  (scale only for vertical zoom)
+ *   Note: translateY is applied via CSS on the content-layer parent
+ * 
  * This is the key to the camera system - instead of positioning cards at their
  * absolute world coordinates (which can be in the billions), we calculate their
  * position relative to the camera/viewport. This keeps all DOM coordinates within
@@ -51,13 +56,13 @@ export class CardCameraRenderer {
       };
     }
 
-    // Calculate screen coordinates using the standard transformation
-    // screenX = worldX * scale + translateX
-    const screenX = card.x * viewport.scale + viewport.translateX;
-    // screenY is calculated WITHOUT translateY because cards are positioned
-    // relative to the content-layer which already has translateY applied via CSS
+    // Calculate screen coordinates
+    // X-axis: no scale multiplier (timeScale already determines world X positions)
+    const screenX = card.x + viewport.translateX;
+    // Y-axis: scale affects vertical zoom (translateY handled by CSS parent)
     const screenY = card.y * viewport.scale;
-    const screenWidth = card.width * viewport.scale;
+    // Width: no scale multiplier for X
+    const screenWidth = card.width;
     const screenRight = screenX + screenWidth;
 
     // Check visibility - card is visible if any part overlaps with viewport

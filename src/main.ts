@@ -52,6 +52,26 @@ export default class MyPlugin extends Plugin {
 			}
 		});
 
+		// Add command to go to a specific note in the timeline
+		this.addCommand({
+			id: 'timeline-go-to-note',
+			name: 'Go to note',
+			callback: () => {
+				const view = this.app.workspace.getActiveViewOfType(TimelineView);
+				if (!view || view.timelineItems.length === 0) {
+					new Notice('No timeline items available');
+					return;
+				}
+				import('./modals/TimelineItemSuggestModal').then(({ TimelineItemSuggestModal }) => {
+					new TimelineItemSuggestModal(
+						this.app,
+						view.timelineItems,
+						(item) => view.goToItem(item)
+					).open();
+				});
+			}
+		});
+
 		// Original sample commands
 		this.addCommand({
 			id: 'open-modal-simple',

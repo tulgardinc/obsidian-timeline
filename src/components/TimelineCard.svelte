@@ -16,16 +16,17 @@
 		onResize?: (newX: number, newWidth: number, finished: boolean) => void;
 		onMove?: (newX: number, newY: number, finished: boolean) => void;
 		onLayerChange?: (newLayer: number, newX: number, newWidth: number, finished: boolean) => void;
-		onClick?: () => void;
+		onClick?: (event: MouseEvent) => void;
 		onSelect?: () => void;
 		onUpdateSelection?: (startX: number, endX: number, startDate: string, endDate: string) => void;
 		onDragStart?: () => void;
 		onDragEnd?: () => void;
 		onResizeStart?: (edge: 'left' | 'right') => void;
 		onResizeEnd?: () => void;
+		onContextMenu?: (event: MouseEvent) => void;
 	}
 
-	let { x, y, width, title, layer, color, isSelected = false, onResize, onMove, onLayerChange, onClick, onSelect, onUpdateSelection, onDragStart, onDragEnd, onResizeStart, onResizeEnd }: Props = $props();
+	let { x, y, width, title, layer, color, isSelected = false, onResize, onMove, onLayerChange, onClick, onSelect, onUpdateSelection, onDragStart, onDragEnd, onResizeStart, onResizeEnd, onContextMenu }: Props = $props();
 
 	const GRID_SPACING = 50;
 	const START_DATE = new Date('1970-01-01');
@@ -42,26 +43,27 @@
 	let viewportWidth = $derived(viewport?.getViewportWidth() ?? 0);
 	let viewportHeight = $derived(viewport?.getViewportHeight() ?? 0);
 
-	// Get current scale level for marker-based snapping (uses effective density = timeScale * scale)
-	let scaleLevel = $derived(() => TimeScaleManager.getScaleLevel(timeScale, scale));
+	// Get current scale level for marker-based snapping (based on timeScale pixel density)
+	let scaleLevel = $derived(() => TimeScaleManager.getScaleLevel(timeScale));
 
-	// Local display state - used during drag operations
-	let displayX = $state(x);
-	let displayY = $state(y);
-	let displayWidth = $state(width);
+	// Local world coordinate state - used during drag operations
+	// These are WORLD coordinates, not screen coordinates
+	let worldX = $state(x);
+	let worldY = $state(y);
+	let worldWidth = $state(width);
 	
 	// Sync props to local state when NOT dragging
 	$effect(() => {
 		if (!isResizing && !isMoving) {
-			displayX = x;
-			displayY = y;
-			displayWidth = width;
+			worldX = x;
+			worldY = y;
+			worldWidth = width;
 		}
 	});
 
 	// Snap y to grid lines (position card between lines)
 	let snappedY = $derived(() => {
-		return Math.round(displayY / GRID_SPACING) * GRID_SPACING;
+		return Math.round(worldY / GRID_SPACING) * GRID_SPACING;
 	});
 
 	// Build viewport state for camera system
@@ -73,12 +75,12 @@
 		scale
 	});
 
-	// Card data in world coordinates - computed from display state
+	// Card data in world coordinates - computed from local world state
 	// Height is GRID_SPACING in world coordinates
 	let cardData = $derived<CardWorldData>({
-		x: displayX,
+		x: worldX,
 		y: snappedY(),
-		width: displayWidth,
+		width: worldWidth,
 		height: GRID_SPACING
 	});
 
@@ -113,6 +115,7 @@
 	let dragStartY = $state(0);
 	let dragStartWidth = $state(0);
 	let dragThresholdMet = $state(false);
+	let lastClickEvent = $state<MouseEvent | null>(null);
 
 	let cardRef: HTMLDivElement;
 
@@ -130,15 +133,15 @@
 	function xToDate(xPos: number): string {
 		// Convert world X to day using unified function
 		const days = TimeScaleManager.worldXToDay(xPos, timeScale);
-		const scaleLevel = TimeScaleManager.getScaleLevel(timeScale, scale);
-		return TimeScaleManager.formatDateForLevel(Math.round(days), scaleLevel);
+		const level = TimeScaleManager.getScaleLevel(timeScale);
+		return TimeScaleManager.formatDateForLevel(Math.round(days), level);
 	}
 
 	// Update selection boundary data during drag/resize
 	function updateSelectionData() {
 		if (isSelected && onUpdateSelection) {
-			const startX = displayX;
-			const endX = displayX + displayWidth;
+			const startX = worldX;
+			const endX = worldX + worldWidth;
 			const startDate = xToDate(startX);
 			const endDate = xToDate(endX);
 			onUpdateSelection(startX, endX, startDate, endDate);
@@ -165,7 +168,8 @@
 		
 		if (isResizing) {
 			const mouseDelta = event.clientX - startMouseX;
-			const worldDelta = mouseDelta / scale;
+			// X-axis: screen pixels = world pixels (no scale on X)
+			const worldDelta = mouseDelta;
 			
 			if (resizeEdge === 'right') {
 				// Right edge: change width
@@ -183,7 +187,7 @@
 				}
 				
 				// Update local display state directly
-				displayWidth = newWidth;
+				worldWidth = newWidth;
 				
 				// Notify parent for optimistic updates, but don't wait for response
 				if (onResize) {
@@ -211,8 +215,8 @@
 				const newX = endX - newWidth;
 				
 				// Update local display state directly
-				displayX = newX;
-				displayWidth = newWidth;
+				worldX = newX;
+				worldWidth = newWidth;
 				
 				// Notify parent for optimistic updates, but don't wait for response
 				if (onResize) {
@@ -226,7 +230,9 @@
 			// Move entire card
 			const mouseDeltaX = event.clientX - startMouseX;
 			const mouseDeltaY = event.clientY - startMouseY;
-			const worldDeltaX = mouseDeltaX / scale;
+			// X-axis: screen pixels = world pixels (no scale on X)
+			const worldDeltaX = mouseDeltaX;
+			// Y-axis: scale affects vertical zoom
 			const worldDeltaY = mouseDeltaY / scale;
 			
 			// Calculate new X position
@@ -242,8 +248,8 @@
 			let newSnappedY = layerToY(calculatedLayer);
 			
 			// Update local display state directly
-			displayX = newX;
-			displayY = newSnappedY;
+			worldX = newX;
+			worldY = newSnappedY;
 			
 			// Notify parent for optimistic updates
 			if (onMove) {
@@ -265,8 +271,8 @@
 			
 			isResizing = true;
 			startMouseX = event.clientX;
-			dragStartX = displayX; // Use local display state
-			dragStartWidth = displayWidth; // Use local display state
+			dragStartX = worldX; // Use local world coordinate state
+			dragStartWidth = worldWidth; // Use local world coordinate state
 			
 			// Notify parent that resize has started (with edge info)
 			if (onResizeStart && resizeEdge) {
@@ -291,9 +297,10 @@
 			isMouseDown = true;
 			startMouseX = event.clientX;
 			startMouseY = event.clientY;
-			dragStartX = displayX; // Use local display state
-			dragStartY = displayY; // Use local display state
+			dragStartX = worldX; // Use local world coordinate state
+			dragStartY = worldY; // Use local world coordinate state
 			dragThresholdMet = false;
+			lastClickEvent = event; // Store event for onClick callback
 			
 			// Add global listeners
 			window.addEventListener('mousemove', handleWindowMouseMove);
@@ -307,13 +314,13 @@
 
 	function handleMouseUp() {
 		// Check if this was a click (mouse down but never started moving)
-		if (isMouseDown && !isMoving && !dragThresholdMet && onClick) {
-			onClick();
+		if (isMouseDown && !isMoving && !dragThresholdMet && onClick && lastClickEvent) {
+			onClick(lastClickEvent);
 		}
 		
 		if (isResizing && onResize) {
-			// Signal resize is finished - use local display state
-			onResize(displayX, displayWidth, true);
+			// Signal resize is finished - use local world coordinate state
+			onResize(worldX, worldWidth, true);
 		}
 		
 		// Notify parent that resize has ended
@@ -322,7 +329,7 @@
 		}
 		
 		if (isMoving && onMove) {
-			onMove(displayX, snappedY(), true);
+			onMove(worldX, snappedY(), true);
 		}
 		
 		// Notify parent that drag has ended
@@ -377,6 +384,20 @@
 		event.stopPropagation();
 	}
 
+	function handleContextMenu(event: MouseEvent) {
+		// Prevent default browser context menu
+		event.preventDefault();
+		event.stopPropagation();
+
+		// Select the card when opening context menu
+		if (onSelect) {
+			onSelect();
+		}
+
+		// Emit event to parent - parent will use Obsidian Menu API
+		onContextMenu?.(event);
+	}
+
 	onMount(() => {
 		return () => {
 			// Cleanup
@@ -409,6 +430,7 @@
 		onmouseleave={handleCardMouseLeave}
 		onmousedown={handleMouseDown}
 		onclick={handleClick}
+		oncontextmenu={handleContextMenu}
 		role="button"
 		tabindex="0"
 		aria-label="Timeline card: {title}"

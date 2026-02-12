@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, TFile, Notice } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, Notice, Menu } from "obsidian";
 import Timeline from "../components/Timeline.svelte";
 import { mount, unmount } from "svelte";
 import { LayerManager, type LayerableItem, type LayerAssignment, type TimelineColor } from "../utils/LayerManager";
@@ -7,6 +7,7 @@ import { TimeScaleManager } from "../utils/TimeScaleManager";
 import { TimelineDate } from "../utils/TimelineDate";
 import type { TimelineItem } from "../stores/timelineStore";
 import { DeleteConfirmModal, type DeleteAction } from "../modals/DeleteConfirmModal";
+import { TimelineItemSuggestModal } from "../modals/TimelineItemSuggestModal";
 
 export const VIEW_TYPE_TIMELINE = "timeline-view";
 
@@ -25,9 +26,13 @@ interface ExpectedFileState {
 }
 
 export class TimelineView extends ItemView {
-	private component: { 
+	private component: {
 		refreshItems?: (items: TimelineItem[]) => void;
 		setSelection?: (index: number | null, cardData: { startX: number; endX: number; startDate: string; endDate: string; title: string } | null) => void;
+		centerOnItem?: (index: number) => void;
+		getCenterTime?: () => number | null;
+		centerOnTime?: (days: number) => void;
+		fitCardWidth?: (cardStartX: number, cardWidth: number) => void;
 		[key: string]: unknown;
 	} | null = null;
 	timelineItems: TimelineItem[] = [];
@@ -629,11 +634,17 @@ export class TimelineView extends ItemView {
 	 * Select a card (without toggling - always select)
 	 */
 	private selectCard(index: number): void {
+		// Ensure the view is the active leaf when selecting a card
+		// This is required for keyboard shortcuts to work properly
+		if (this.leaf !== this.app.workspace.activeLeaf) {
+			this.app.workspace.setActiveLeaf(this.leaf);
+		}
+
 		// If already selected, do nothing
 		if (this.selectedIndex === index) {
 			return;
 		}
-		
+
 		// Select the card
 		this.selectedIndex = index;
 		
@@ -663,6 +674,12 @@ export class TimelineView extends ItemView {
 	 * Toggle selection of a card (select if not selected, deselect if already selected)
 	 */
 	private toggleSelection(index: number): void {
+		// Ensure the view is the active leaf when toggling selection
+		// This is required for keyboard shortcuts to work properly
+		if (this.leaf !== this.app.workspace.activeLeaf) {
+			this.app.workspace.setActiveLeaf(this.leaf);
+		}
+
 		// If clicking the same card, deselect it (toggle off)
 		if (this.selectedIndex === index) {
 			this.selectedIndex = null;
@@ -701,6 +718,58 @@ export class TimelineView extends ItemView {
 		this.selectedIndex = null;
 		this.selectedCardData = null;
 		this.updateSelectionInComponent();
+	}
+
+	/**
+	 * Show context menu for a card using Obsidian's Menu API
+	 */
+	private showCardContextMenu(index: number, event: MouseEvent): void {
+		// Stop event propagation to prevent native context menu
+		event.preventDefault();
+		event.stopPropagation();
+
+		if (index < 0 || index >= this.timelineItems.length) {
+			return;
+		}
+
+		const item = this.timelineItems[index]!;
+
+		const menu = new Menu();
+		// Force DOM menu instead of native (especially on macOS)
+		menu.setUseNativeMenu(false);
+
+		// Fit to View option - zooms to fit card width edge-to-edge
+		menu.addItem((itemMenu) => {
+			itemMenu
+				.setTitle("Fit to View")
+				.setIcon("maximize")
+				.onClick(() => {
+					// Select the card first
+					this.selectCard(index);
+					// Use the component's fitCardWidth method
+					if (this.component && 'fitCardWidth' in this.component) {
+						(this.component as { fitCardWidth: (x: number, width: number) => void }).fitCardWidth(item.x, item.width);
+					}
+				});
+		});
+
+		menu.addSeparator();
+
+		// Delete option - triggers the same flow as keyboard delete
+		menu.addItem((itemMenu) => {
+			itemMenu
+				.setTitle("Delete")
+				.setIcon("trash")
+				.onClick(() => {
+					// Select the card first (needed for delete handler)
+					this.selectCard(index);
+					// Trigger the delete flow
+					this.handleDeleteCard();
+				});
+		});
+
+		// Show menu at mouse position
+		menu.showAtMouseEvent(event);
 	}
 
 	/**
@@ -777,6 +846,26 @@ export class TimelineView extends ItemView {
 	}
 
 	/**
+	 * Navigate to a specific timeline item - centers viewport and selects the card
+	 */
+	goToItem(item: TimelineItem): void {
+		// Find the index of the item
+		const index = this.timelineItems.findIndex(i => i.file.path === item.file.path);
+		if (index === -1) {
+			console.error('Timeline: Item not found in timeline', item.file.path);
+			return;
+		}
+
+		// Center the viewport on the item
+		if (this.component?.centerOnItem) {
+			this.component.centerOnItem(index);
+		}
+
+		// Select the card
+		this.selectCard(index);
+	}
+
+	/**
 	 * Update the Svelte component with current selection state
 	 */
 	private updateSelectionInComponent(): void {
@@ -817,10 +906,14 @@ export class TimelineView extends ItemView {
 					onItemLayerChange: (index: number, newLayer: number, newX: number, newWidth: number) => {
 						this.updateItemLayer(index, newLayer, newX, newWidth);
 					},
-					onItemClick: (index: number) => {
-						// Toggle selection and open file
-						this.toggleSelection(index);
-						this.openFile(index);
+					onItemClick: (index: number, event: MouseEvent) => {
+						if (event.shiftKey) {
+							// Shift+click: select the card only
+							this.toggleSelection(index);
+						} else {
+							// Regular click: open the file only
+							this.openFile(index);
+						}
 					},
 					onItemSelect: (index: number) => {
 						// Select the card after move/resize (do not open file)
@@ -859,6 +952,9 @@ export class TimelineView extends ItemView {
 					},
 					onCanvasClick: () => {
 						this.clearSelection();
+					},
+					onItemContextMenu: (index: number, event: MouseEvent) => {
+						this.showCardContextMenu(index, event);
 					}
 				}
 			});
@@ -1134,7 +1230,7 @@ export class TimelineView extends ItemView {
 			                       activeElement?.closest('.markdown-source-view') !== null ||
 			                       activeElement?.tagName === 'TEXTAREA' ||
 			                       activeElement?.tagName === 'INPUT';
-			
+
 			// If an editor has focus, let Obsidian handle it
 			if (isEditorFocused) return;
 			
@@ -1146,9 +1242,9 @@ export class TimelineView extends ItemView {
 			if (!this.contentEl.isConnected) return;
 			
 			// Handle Delete key (Windows/Linux: Delete, Mac: Cmd+Backspace or Cmd+Delete)
-			const isDelete = event.key === 'Delete' || 
+			const isDelete = event.key === 'Delete' ||
 			                (event.key === 'Backspace' && (event.ctrlKey || event.metaKey));
-			
+
 			if (isDelete && this.selectedIndex !== null) {
 				event.preventDefault();
 				event.stopPropagation();

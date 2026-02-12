@@ -37,7 +37,7 @@ describe('CameraSystem', () => {
       expect(result.y).toBe(-50);
     });
 
-    it('should account for scale', () => {
+    it('should account for scale on Y axis only', () => {
       const viewport: ViewportState = {
         width: VIEWPORT_WIDTH,
         height: VIEWPORT_HEIGHT,
@@ -46,10 +46,10 @@ describe('CameraSystem', () => {
         scale: 2 // 2x zoom
       };
 
-      // At 2x scale, world distance doubles
+      // At 2x scale, only Y doubles. X is unaffected by scale.
       const result = CameraSystem.worldToViewport(100, 100, viewport);
-      expect(result.x).toBe(200);
-      expect(result.y).toBe(200);
+      expect(result.x).toBe(100); // X: worldX + translateX = 100 + 0
+      expect(result.y).toBe(200); // Y: worldY * scale + translateY = 100 * 2 + 0
     });
 
     it('should handle combined scale and translation', () => {
@@ -62,8 +62,9 @@ describe('CameraSystem', () => {
       };
 
       const result = CameraSystem.worldToViewport(100, 100, viewport);
-      // screenX = worldX * scale + translateX = 100 * 2 + (-100) = 100
-      expect(result.x).toBe(100);
+      // screenX = worldX + translateX = 100 + (-100) = 0 (no scale on X)
+      // screenY = worldY * scale + translateY = 100 * 2 + (-50) = 150
+      expect(result.x).toBe(0);
       expect(result.y).toBe(150);
     });
   });
@@ -165,7 +166,7 @@ describe('CameraSystem', () => {
       expect(bounds.bottom).toBe(650);
     });
 
-    it('should calculate bounds with scale', () => {
+    it('should calculate bounds with scale (Y only)', () => {
       const viewport: ViewportState = {
         width: VIEWPORT_WIDTH,
         height: VIEWPORT_HEIGHT,
@@ -176,11 +177,11 @@ describe('CameraSystem', () => {
 
       const bounds = CameraSystem.getVisibleWorldBounds(viewport);
       
-      // At 2x zoom, viewport shows half the world width
+      // Scale only affects Y, so X range stays the same
       expect(bounds.left).toBe(0);
-      expect(bounds.right).toBe(400); // 800 / 2
+      expect(bounds.right).toBe(800); // X unaffected by scale
       expect(bounds.top).toBe(0);
-      expect(bounds.bottom).toBe(300); // 600 / 2
+      expect(bounds.bottom).toBe(300); // 600 / 2 (Y divided by scale)
     });
   });
 
@@ -201,7 +202,7 @@ describe('CameraSystem', () => {
       expect(renderPos.width).toBe(150);
     });
 
-    it('should handle large scale', () => {
+    it('should handle large scale (Y only)', () => {
       const viewport: ViewportState = {
         width: VIEWPORT_WIDTH,
         height: VIEWPORT_HEIGHT,
@@ -212,9 +213,12 @@ describe('CameraSystem', () => {
 
       const renderPos = CameraSystem.getCardRenderPosition(100, 100, 50, viewport);
       
-      expect(renderPos.x).toBe(200); // 100 * 2
+      // X: no scale, worldX + translateX = 100 + 0 = 100
+      expect(renderPos.x).toBe(100);
+      // Y: worldY * scale + translateY = 100 * 2 + 0 = 200
       expect(renderPos.y).toBe(200);
-      expect(renderPos.width).toBe(100); // 50 * 2
+      // Width: no scale on X
+      expect(renderPos.width).toBe(50);
     });
 
     it('should produce reasonable coordinates for extreme world positions', () => {
@@ -250,7 +254,7 @@ describe('CameraSystem', () => {
       const offset = CameraSystem.centerOn(500, 400, viewport);
       
       // To center (500, 400) in 800x600 viewport:
-      // translateX = centerX - worldX * scale = 400 - 500 = -100
+      // translateX = centerX - worldX = 400 - 500 = -100 (no scale on X)
       // translateY = centerY - worldY * scale = 300 - 400 = -100
       expect(offset.x).toBe(-100);
       expect(offset.y).toBe(-100);
@@ -269,7 +273,7 @@ describe('CameraSystem', () => {
       const offset = CameraSystem.centerOn(extremeX, 0, viewport);
       
       // Should produce reasonable offset, not extreme
-      // translateX = 400 - 10000000 = -9999600
+      // translateX = 400 - 10000000 = -9999600 (no scale on X)
       expect(offset.x).toBe(-9999600);
       // This is the expected behavior - viewport offset becomes extreme,
       // but individual card positions remain manageable via the camera system
@@ -301,7 +305,9 @@ describe('CameraSystem', () => {
       };
 
       const result = CameraSystem.worldToViewport(100, 100, viewport);
-      expect(result.x).toBe(-100);
+      // X: no scale, worldX + translateX = 100
+      expect(result.x).toBe(100);
+      // Y: worldY * scale = 100 * -1 = -100
       expect(result.y).toBe(-100);
     });
 
@@ -319,8 +325,9 @@ describe('CameraSystem', () => {
       const screen = CameraSystem.worldToViewport(world.x, world.y, viewport);
       const backToWorld = CameraSystem.viewportToWorld(screen.x, screen.y, viewport);
       
-      expect(backToWorld.x).toBe(world.x);
-      expect(backToWorld.y).toBe(world.y);
+      // Round trip should give back the same world coordinates
+      expect(backToWorld.x).toBeCloseTo(world.x, 5);
+      expect(backToWorld.y).toBeCloseTo(world.y, 5);
     });
   });
 });

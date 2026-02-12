@@ -1,3 +1,26 @@
+/**
+ * CameraSystem - 2D Viewport Coordinate Utilities
+ * 
+ * This module handles full 2D coordinate transformations between world
+ * and viewport (screen) space. It operates on both X and Y axes together.
+ * 
+ * Use CameraSystem for:
+ * - Full 2D world ↔ viewport conversions (worldToViewport, viewportToWorld)
+ * - Viewport visibility checks (isInViewport, getVisibleWorldBounds)
+ * - Card rendering positions (getCardRenderPosition)
+ * - Centering calculations for both axes (centerOn)
+ * 
+ * Use TimeScaleManager (see TimeScaleManager.ts) for:
+ * - X-axis only / time-specific operations
+ * - Day ↔ World X ↔ Screen X conversions
+ * - Time scale levels and marker generation
+ * - Date formatting
+ * 
+ * COORDINATE SYSTEM:
+ * - X-axis: screenX = worldX + translateX  (NO scale multiplier)
+ * - Y-axis: screenY = worldY * scale + translateY  (scale only affects Y)
+ */
+
 export interface ViewportState {
   width: number;
   height: number;
@@ -24,10 +47,17 @@ export interface WorldBounds {
   bottom: number;
 }
 
+/**
+ * CameraSystem handles coordinate transformations between world and viewport space.
+ * 
+ * COORDINATE SYSTEM:
+ * X-axis: screenX = worldX + translateX  (NO scale multiplier - timeScale handles X density)
+ * Y-axis: screenY = worldY * scale + translateY  (scale only affects vertical zoom)
+ */
 export class CameraSystem {
   /**
    * Convert world coordinates to viewport-relative coordinates
-   * This is the core transformation that keeps cards near 0,0 in the DOM
+   * X uses only translateX (no scale), Y uses scale + translateY
    */
   static worldToViewport(
     worldX: number,
@@ -38,8 +68,9 @@ export class CameraSystem {
       return { x: 0, y: 0 };
     }
 
-    // Standard screen coordinate calculation
-    const screenX = worldX * viewport.scale + viewport.translateX;
+    // X-axis: no scale multiplier
+    const screenX = worldX + viewport.translateX;
+    // Y-axis: scale affects vertical zoom
     const screenY = worldY * viewport.scale + viewport.translateY;
 
     return {
@@ -60,7 +91,9 @@ export class CameraSystem {
       return { x: 0, y: 0 };
     }
 
-    const worldX = (viewportX - viewport.translateX) / viewport.scale;
+    // X-axis: no scale
+    const worldX = viewportX - viewport.translateX;
+    // Y-axis: inverse of scale
     const worldY = (viewportY - viewport.translateY) / viewport.scale;
 
     return { x: worldX, y: worldY };
@@ -129,7 +162,8 @@ export class CameraSystem {
   ): RenderPosition {
     // Convert to viewport coordinates
     const pos = this.worldToViewport(worldX, worldY, viewport);
-    const scaledWidth = worldWidth * viewport.scale;
+    // X-axis: width is not scaled (timeScale already determines world width)
+    const scaledWidth = worldWidth;
 
     return {
       x: pos.x,
@@ -150,7 +184,9 @@ export class CameraSystem {
     const centerY = viewport.height / 2;
 
     return {
-      x: centerX - worldX * viewport.scale,
+      // X-axis: no scale
+      x: centerX - worldX,
+      // Y-axis: uses scale
       y: centerY - worldY * viewport.scale
     };
   }

@@ -4,39 +4,31 @@ import { TimeScaleManager } from './TimeScaleManager';
 describe('TimeScaleManager', () => {
   describe('getScaleLevel', () => {
     it('should return level 0 for day view (high zoom)', () => {
-      // At 10 pixels per day with 1x scale = 10 pixels/day
+      // At 10 pixels per day = 10 pixels/day
       // Level 0 spacing: 10 * 1 = 10px between day markers
-      expect(TimeScaleManager.getScaleLevel(10, 1)).toBe(0);
+      expect(TimeScaleManager.getScaleLevel(10)).toBe(0);
     });
 
     it('should return level 1 when day markers would be too close', () => {
       // At 0.5 pixels per day, day markers would be 0.5px apart
       // Should switch to level 1 (month markers)
-      expect(TimeScaleManager.getScaleLevel(0.5, 1)).toBeGreaterThanOrEqual(1);
+      expect(TimeScaleManager.getScaleLevel(0.5)).toBeGreaterThanOrEqual(1);
     });
 
     it('should return higher levels for lower zoom', () => {
       // Very zoomed out view
-      const level1 = TimeScaleManager.getScaleLevel(1, 1);
-      const level2 = TimeScaleManager.getScaleLevel(0.1, 1);
-      const level3 = TimeScaleManager.getScaleLevel(0.01, 1);
+      const level1 = TimeScaleManager.getScaleLevel(1);
+      const level2 = TimeScaleManager.getScaleLevel(0.1);
+      const level3 = TimeScaleManager.getScaleLevel(0.01);
 
       expect(level2).toBeGreaterThan(level1);
       expect(level3).toBeGreaterThan(level2);
     });
 
-    it('should account for scale multiplier', () => {
-      // Same timeScale but different scale should give different levels
-      const levelAt1x = TimeScaleManager.getScaleLevel(1, 1);
-      const levelAt2x = TimeScaleManager.getScaleLevel(1, 2);
-
-      expect(levelAt2x).toBeLessThanOrEqual(levelAt1x);
-    });
-
     it('should return consistent levels for extreme zoom levels', () => {
       // Test that we don't crash at extreme values
-      expect(TimeScaleManager.getScaleLevel(0.0001, 1)).toBeGreaterThan(0);
-      expect(TimeScaleManager.getScaleLevel(1000, 1)).toBe(0);
+      expect(TimeScaleManager.getScaleLevel(0.0001)).toBeGreaterThan(0);
+      expect(TimeScaleManager.getScaleLevel(1000)).toBe(0);
     });
   });
 
@@ -114,7 +106,6 @@ describe('TimeScaleManager', () => {
       const markers = TimeScaleManager.getVisibleMarkers(
         0,      // level (days)
         10,     // timeScale (10 px/day)
-        1,      // scale
         0,      // translateX
         800     // viewportWidth
       );
@@ -126,7 +117,6 @@ describe('TimeScaleManager', () => {
       const markers = TimeScaleManager.getVisibleMarkers(
         2,      // level (years)
         10,
-        1,
         0,
         800
       );
@@ -136,11 +126,11 @@ describe('TimeScaleManager', () => {
 
     it('should account for translation', () => {
       const markersWithoutTranslation = TimeScaleManager.getVisibleMarkers(
-        0, 10, 1, 0, 800
+        0, 10, 0, 800
       );
 
       const markersWithTranslation = TimeScaleManager.getVisibleMarkers(
-        0, 10, 1, -400, 800  // Panned right
+        0, 10, -400, 800  // Panned right
       );
 
       // Both should return arrays (might be empty depending on viewport)
