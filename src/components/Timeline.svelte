@@ -83,6 +83,11 @@
 		infiniteCanvasRef?.fitCardWidth(cardStartX, cardWidth);
 	}
 
+	// Export a function to fit a time range to the viewport (edge-to-edge)
+	export function fitTimeRange(startDay: number, endDay: number, centerDay: number) {
+		infiniteCanvasRef?.fitTimeRange(startDay, endDay, centerDay);
+	}
+
 	// Export function to get current viewport state
 	export function getViewport(): { centerX: number; centerY: number; timeScale: number } | null {
 		return infiniteCanvasRef?.getViewport() ?? null;

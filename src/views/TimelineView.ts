@@ -41,6 +41,7 @@ export class TimelineView extends ItemView {
 		getCenterTime?: () => number | null;
 		centerOnTime?: (days: number) => void;
 		fitCardWidth?: (cardStartX: number, cardWidth: number) => void;
+		fitTimeRange?: (startDay: number, endDay: number, centerDay: number) => void;
 		setViewport?: (viewport: ViewportState) => void;
 		getViewport?: () => ViewportState | null;
 		[key: string]: unknown;
@@ -822,8 +823,16 @@ export class TimelineView extends ItemView {
 						this.activeIndex = index;
 						this.updateSelectedCardData(index);
 					}
-					if (this.component && 'fitCardWidth' in this.component) {
-						(this.component as { fitCardWidth: (x: number, width: number) => void }).fitCardWidth(item.x, item.width);
+					
+					// Check if we have a multi-selection (more than 1 card selected)
+					if (this.selectedIndices.size > 1) {
+						// Multi-select: fit to the range of all selected cards
+						this.fitSelectedCardsToView();
+					} else {
+						// Single card: use the existing single-card fit
+						if (this.component && 'fitCardWidth' in this.component) {
+							(this.component as { fitCardWidth: (x: number, width: number) => void }).fitCardWidth(item.x, item.width);
+						}
 					}
 				});
 		});
@@ -1039,6 +1048,56 @@ export class TimelineView extends ItemView {
 
 		if (this.component && 'fitCardWidth' in this.component) {
 			(this.component as { fitCardWidth: (x: number, width: number) => void }).fitCardWidth(item.x, item.width);
+		}
+	}
+
+	/**
+	 * Fit all selected cards to the viewport
+	 * Centers on the median of all selected cards and sets timeScale to fit the min/max range
+	 */
+	private fitSelectedCardsToView(): void {
+		if (this.selectedIndices.size === 0) return;
+		
+		// Get all selected items
+		const selectedItems = Array.from(this.selectedIndices)
+			.filter(index => index >= 0 && index < this.timelineItems.length)
+			.map(index => this.timelineItems[index]!);
+		
+		if (selectedItems.length === 0) return;
+		
+		// Calculate the time range across all selected cards
+		// Convert world X coordinates to days from epoch
+		let minStartDay = Infinity;
+		let maxEndDay = -Infinity;
+		const centerDays: number[] = [];
+		
+		for (const item of selectedItems) {
+			const startDay = TimeScaleManager.worldXToDay(item.x, this.timeScale);
+			const endDay = TimeScaleManager.worldXToDay(item.x + item.width, this.timeScale);
+			const centerDay = (startDay + endDay) / 2;
+			
+			minStartDay = Math.min(minStartDay, startDay);
+			maxEndDay = Math.max(maxEndDay, endDay);
+			centerDays.push(centerDay);
+		}
+		
+		// Calculate median center day
+		centerDays.sort((a, b) => a - b);
+		let medianCenterDay: number;
+		const midIndex = Math.floor(centerDays.length / 2);
+		
+		if (centerDays.length % 2 === 0) {
+			// Even number of cards: average of two middle centers
+			medianCenterDay = (centerDays[midIndex - 1]! + centerDays[midIndex]!) / 2;
+		} else {
+			// Odd number of cards: middle center
+			medianCenterDay = centerDays[midIndex]!;
+		}
+		
+		// Call fitTimeRange on the component
+		if (this.component && 'fitTimeRange' in this.component) {
+			(this.component as { fitTimeRange: (startDay: number, endDay: number, centerDay: number) => void })
+				.fitTimeRange(minStartDay, maxEndDay, medianCenterDay);
 		}
 	}
 

@@ -603,6 +603,34 @@
 		translateX = clampTranslateX(translateX);
 	}
 
+	/**
+	 * Fit a time range to fill the viewport width edge-to-edge
+	 * Adjusts timeScale to make the time range match viewport width
+	 * Centers horizontally on the specified center time
+	 * Does not change Y position or Y scale
+	 */
+	export function fitTimeRange(startDay: number, endDay: number, centerDay: number) {
+		const rect = viewportRef?.getBoundingClientRect();
+		if (!rect) return;
+
+		const durationDays = endDay - startDay;
+		if (durationDays <= 0) return;
+
+		// Calculate new timeScale: viewportWidth pixels / durationDays
+		// This makes the time range fill the entire viewport width (edge to edge)
+		const newTimeScale = clampTimeScale(rect.width / durationDays);
+
+		// Apply the new timeScale
+		timeScale = newTimeScale;
+
+		// Center horizontally on the specified center time
+		const centerWorldX = TimeScaleManager.dayToWorldX(centerDay, timeScale);
+		translateX = TimeScaleManager.calculateTranslateXToCenterWorldX(centerWorldX, rect.width);
+		
+		// Clamp translation to keep viewport within bounds
+		translateX = clampTranslateX(translateX);
+	}
+
 	// Update viewport dimensions
 	function updateViewportDimensions() {
 		if (viewportRef) {
