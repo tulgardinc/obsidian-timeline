@@ -49,7 +49,7 @@ export interface TimelineCache {
 }
 
 const CACHE_VERSION = 1;
-const CACHE_FILE_PATH = './timelines/timelines.json';
+const CACHE_FILE_PATH = './.timelines/timelines.json';
 const VIEWPORT_SAVE_DEBOUNCE = 500; // ms
 
 /**
@@ -131,7 +131,7 @@ export class TimelineCacheService {
 		
 		try {
 			// Ensure the timelines directory exists
-			const dirPath = './timelines';
+			const dirPath = './.timelines';
 			const dirExists = await this.app.vault.adapter.exists(dirPath);
 			if (!dirExists) {
 				debug('Cache', 'Creating timelines directory');
