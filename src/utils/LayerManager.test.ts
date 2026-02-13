@@ -14,14 +14,14 @@ function makeItem(
   startStr: string,
   endStr: string,
   layer?: number,
-  frontmatterLayer?: number
+  cachedLayer?: number
 ): LayerableItem {
   return {
     file: mockFile(path),
     dateStart: TimelineDate.fromString(startStr)!,
     dateEnd: TimelineDate.fromString(endStr)!,
     layer,
-    frontmatterLayer
+    cachedLayer
   };
 }
 

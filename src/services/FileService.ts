@@ -1,35 +1,66 @@
-import type { App, TFile } from 'obsidian';
-import { LayerManager, type LayerAssignment, type LayerableItem } from '../utils/LayerManager';
+import { type App, TFile } from 'obsidian';
+import { LayerManager, type LayerableItem } from '../utils/LayerManager';
 import { TimeScaleManager } from '../utils/TimeScaleManager';
 import { TimelineDate } from '../utils/TimelineDate';
 import type { TimelineItem } from '../stores/timelineStore';
+import type { TimelineCacheService } from './TimelineCacheService';
 
 export interface FileServiceDependencies {
 	app: App;
 	timeScale: number;
+	rootPath?: string;  // Root directory path to filter files, "" = entire vault
+	timelineId: string;
+	cacheService: TimelineCacheService;
 }
 
 export class FileService {
 	private app: App;
 	private timeScale: number;
+	private rootPath: string;
+	private timelineId: string;
+	private cacheService: TimelineCacheService;
 
 	constructor(deps: FileServiceDependencies) {
 		this.app = deps.app;
 		this.timeScale = deps.timeScale;
+		this.rootPath = deps.rootPath ?? "";
+		this.timelineId = deps.timelineId;
+		this.cacheService = deps.cacheService;
 	}
 
 	setTimeScale(timeScale: number): void {
 		this.timeScale = timeScale;
 	}
 
+	setRootPath(rootPath: string): void {
+		this.rootPath = rootPath;
+	}
+
 	/**
-	 * Collect all timeline items from markdown files
+	 * Check if a file path is within the configured root path
+	 */
+	private isFileInScope(filePath: string): boolean {
+		// Empty rootPath means entire vault
+		if (this.rootPath === "") {
+			return true;
+		}
+		// Check if file path starts with the root path
+		return filePath === this.rootPath || filePath.startsWith(this.rootPath + "/");
+	}
+
+	/**
+	 * Collect all timeline items from markdown files within the configured root path
 	 */
 	async collectTimelineItems(): Promise<TimelineItem[]> {
 		const layerableItems: LayerableItem[] = [];
 		const allFiles = this.app.vault.getMarkdownFiles();
 
 		for (const file of allFiles) {
+			// Filter by root path
+			if (!this.isFileInScope(file.path)) {
+				continue;
+			}
+
 			const metadata = this.app.metadataCache.getFileCache(file);
 
 			if (metadata?.frontmatter?.timeline !== true) {
@@ -52,9 +83,6 @@ export class FileService {
 				continue;
 			}
 
-			const layerRaw = metadata.frontmatter['layer'];
-			const frontmatterLayer = layerRaw !== undefined ? parseInt(String(layerRaw), 10) : undefined;
-
 			const colorRaw = metadata.frontmatter['color'];
 			const validColors = ['red', 'blue', 'green', 'yellow'] as const;
 			const color = validColors.includes(colorRaw) ? colorRaw : undefined;
@@ -63,45 +91,31 @@ export class FileService {
 				file,
 				dateStart,
 				dateEnd,
-				frontmatterLayer: !isNaN(frontmatterLayer ?? NaN) ? frontmatterLayer : undefined,
 				color
 			});
 		}
 
-		const sortedItems = LayerManager.sortByDate(layerableItems);
-		const layerAssignments = LayerManager.assignLayers(sortedItems);
-
-		if (layerAssignments.length > 0) {
-			await this.batchUpdateLayers(layerAssignments);
+		// Generate IDs for all files that don't have one
+		for (const item of layerableItems) {
+			await this.cacheService.getOrCreateNoteId(item.file);
 		}
 
-		return this.convertToTimelineItems(sortedItems);
-	}
+		// Use cache-aware layer assignment
+		this.cacheService.assignLayersWithCache(
+			this.timelineId,
+			layerableItems,
+			(file) => this.cacheService.getNoteId(file)
+		);
 
-	/**
-	 * Update file with new layer assignments
-	 */
-	async batchUpdateLayers(assignments: LayerAssignment[]): Promise<void> {
-		for (const assignment of assignments) {
-			try {
-				const content = await this.app.vault.read(assignment.file);
-				const layerRegex = /^layer:\s*\S+/m;
-				let newContent: string;
+		// Cleanup notes that are no longer in scope
+		const validNoteIds = new Set(
+			layerableItems
+				.map(item => this.cacheService.getNoteId(item.file))
+				.filter((id): id is string => id !== undefined)
+		);
+		this.cacheService.cleanupOutOfScopeNotes(this.timelineId, validNoteIds);
 
-				if (layerRegex.test(content)) {
-					newContent = content.replace(layerRegex, `layer: ${assignment.layer}`);
-				} else {
-					newContent = content.replace(
-						/(timeline:\s*true.*\n)/,
-						`$1layer: ${assignment.layer}\n`
-					);
-				}
-
-				await this.app.vault.modify(assignment.file, newContent);
-			} catch (error) {
-				console.error(`Timeline: Failed to update layer for ${assignment.file.basename}:`, error);
-			}
-		}
+		return this.convertToTimelineItems(layerableItems);
 	}
 
 	/**
@@ -116,31 +130,13 @@ export class FileService {
 	}
 
 	/**
-	 * Update file layer
+	 * Update note layer in cache (no longer writes to file)
 	 */
-	async updateFileLayer(file: TFile, layer: number, dateStart?: string, dateEnd?: string): Promise<void> {
-		let content = await this.app.vault.read(file);
-
-		// Update layer
-		const layerRegex = /^layer:\s*\S+/m;
-		if (layerRegex.test(content)) {
-			content = content.replace(layerRegex, `layer: ${layer}`);
-		} else {
-			content = content.replace(
-				/(timeline:\s*true.*\n)/,
-				`$1layer: ${layer}\n`
-			);
+	async updateNoteLayer(file: TFile, layer: number): Promise<void> {
+		const noteId = this.cacheService.getNoteId(file);
+		if (noteId) {
+			this.cacheService.setNoteLayer(this.timelineId, noteId, layer, file.path);
 		}
-
-		// Update dates if provided
-		if (dateStart) {
-			content = content.replace(/date-start:\s*\S+/, `date-start: ${dateStart}`);
-		}
-		if (dateEnd) {
-			content = content.replace(/date-end:\s*\S+/, `date-end: ${dateEnd}`);
-		}
-
-		await this.app.vault.modify(file, content);
 	}
 
 	/**

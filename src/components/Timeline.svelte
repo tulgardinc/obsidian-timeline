@@ -16,6 +16,7 @@
 		items: TimelineItem[];
 		selectedIndex?: number | null;
 		selectedCard?: CardHoverData | null;
+		timelineName?: string;
 		onItemResize: (index: number, newX: number, newWidth: number) => void;
 		onItemMove: (index: number, newX: number, newY: number) => void;
 		onItemLayerChange: (index: number, newLayer: number, newX: number, newWidth: number) => void;
@@ -28,9 +29,12 @@
 		onRefreshItems?: () => TimelineItem[];
 		// Callback for context menu - parent uses Obsidian Menu API
 		onItemContextMenu?: (index: number, event: MouseEvent) => void;
+		// Viewport persistence
+		initialViewport?: { centerX: number; centerY: number; timeScale: number; scale?: number } | null;
+		onViewportChange?: () => void;
 	}
 
-	let { items: initialItems, selectedIndex: initialSelectedIndex = null, selectedCard: initialSelectedCard = null, onItemResize, onItemMove, onItemLayerChange, onItemClick, onItemSelect, onUpdateSelectionData, onTimeScaleChange, onCanvasClick, onRefreshItems, onItemContextMenu }: Props = $props();
+	let { items: initialItems, selectedIndex: initialSelectedIndex = null, selectedCard: initialSelectedCard = null, timelineName = "Timeline", onItemResize, onItemMove, onItemLayerChange, onItemClick, onItemSelect, onUpdateSelectionData, onTimeScaleChange, onCanvasClick, onRefreshItems, onItemContextMenu, initialViewport = null, onViewportChange }: Props = $props();
 
 	// Create local reactive state from props for optimistic updates during drag/resize
 	let items = $state<TimelineItem[]>([...initialItems]);
@@ -74,6 +78,16 @@
 	// Export a function to fit a card width to the viewport (edge-to-edge)
 	export function fitCardWidth(cardStartX: number, cardWidth: number) {
 		infiniteCanvasRef?.fitCardWidth(cardStartX, cardWidth);
+	}
+
+	// Export function to get current viewport state
+	export function getViewport(): { centerX: number; centerY: number; timeScale: number } | null {
+		return infiniteCanvasRef?.getViewport() ?? null;
+	}
+
+	// Export function to set viewport state
+	export function setViewport(viewport: { centerX: number; centerY: number; timeScale: number }) {
+		infiniteCanvasRef?.setViewport(viewport);
 	}
 
 	// Track if any card is being dragged or resized
@@ -182,6 +196,9 @@
 			isAnyCardDragging={isAnyCardDragging}
 			isAnyCardResizing={isAnyCardResizing}
 			activeResizeEdge={activeResizeEdge}
+			initialViewport={initialViewport}
+			onViewportChanged={onViewportChange}
+			timelineName={timelineName}
 		>
 			{#each items as item, index (item.file.path)}
 				{@const isCardSelected = selectedIndex === index}

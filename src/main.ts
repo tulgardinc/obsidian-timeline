@@ -1,30 +1,41 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin, WorkspaceLeaf, type MarkdownFileInfo} from 'obsidian';
-import {DEFAULT_SETTINGS, type MyPluginSettings, SampleSettingTab} from "./settings";
-import {TimelineView, VIEW_TYPE_TIMELINE} from "./views/TimelineView";
+import { Editor, MarkdownView, Notice, Plugin, TFile, WorkspaceLeaf, type MarkdownFileInfo } from 'obsidian';
+import { DEFAULT_SETTINGS, type MyPluginSettings, TimelineSettingTab, type TimelineViewConfig, createDefaultAllTimeline } from "./settings";
+import { TimelineView, VIEW_TYPE_TIMELINE } from "./views/TimelineView";
+import { TimelineSelectorModal } from "./modals/TimelineSelectorModal";
+import { TimelineCacheService } from "./services/TimelineCacheService";
 
 export default class MyPlugin extends Plugin {
 	settings!: MyPluginSettings;
+	cacheService!: TimelineCacheService;
 
 	async onload() {
 		await this.loadSettings();
 
-		// Register the Timeline view
+		// Initialize cache service
+		this.cacheService = new TimelineCacheService(this.app);
+		await this.cacheService.initialize();
+
+		// Register the Timeline view with cache service
 		this.registerView(
 			VIEW_TYPE_TIMELINE,
-			(leaf: WorkspaceLeaf) => new TimelineView(leaf)
+			(leaf: WorkspaceLeaf) => {
+				const view = new TimelineView(leaf);
+				view.setCacheService(this.cacheService);
+				return view;
+			}
 		);
 
 		// Add ribbon icon to open Timeline view
 		this.addRibbonIcon('calendar', 'Open Timeline view', () => {
-			this.openTimelineView();
+			this.openTimelineSelector();
 		});
 
-		// Add command to open Timeline view
+		// Add command to open Timeline view (fuzzy finder)
 		this.addCommand({
 			id: 'open-timeline-view',
 			name: 'Open Timeline view',
 			callback: () => {
-				this.openTimelineView();
+				this.openTimelineSelector();
 			}
 		});
 
@@ -35,7 +46,7 @@ export default class MyPlugin extends Plugin {
 			callback: () => {
 				const view = this.app.workspace.getActiveViewOfType(TimelineView);
 				if (view) {
-					view.undo();
+					void view.undo();
 				}
 			}
 		});
@@ -47,7 +58,7 @@ export default class MyPlugin extends Plugin {
 			callback: () => {
 				const view = this.app.workspace.getActiveViewOfType(TimelineView);
 				if (view) {
-					view.redo();
+					void view.redo();
 				}
 			}
 		});
@@ -62,7 +73,7 @@ export default class MyPlugin extends Plugin {
 					new Notice('No timeline items available');
 					return;
 				}
-				import('./modals/TimelineItemSuggestModal').then(({ TimelineItemSuggestModal }) => {
+				void import('./modals/TimelineItemSuggestModal').then(({ TimelineItemSuggestModal }) => {
 					new TimelineItemSuggestModal(
 						this.app,
 						view.timelineItems,
@@ -81,14 +92,26 @@ export default class MyPlugin extends Plugin {
 				const file = ctx.file;
 				if (!file) return;
 
-				// First, ensure the timeline view is open
-				await this.openTimelineView();
+				// Find the first ancestor timeline that contains this file
+				const timeline = this.findTimelineForFile(file.path);
+				if (!timeline) {
+					// No timeline found - silently do nothing
+					return;
+				}
+
+				// Open the timeline view for this config
+				await this.openTimelineView(timeline);
 
 				// Get the timeline view instance
 				const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_TIMELINE);
-				if (leaves.length === 0) return;
+				const targetLeaf = leaves.find(leaf => {
+					const view = leaf.view as TimelineView;
+					return view.getTimelineId() === timeline.id;
+				});
 
-				const timelineView = leaves[0]?.view as TimelineView;
+				if (!targetLeaf) return;
+
+				const timelineView = targetLeaf.view as TimelineView;
 				if (!timelineView) return;
 
 				// Call fit to view for this file
@@ -96,44 +119,122 @@ export default class MyPlugin extends Plugin {
 			}
 		});
 
-		// Original sample commands
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
+		this.addSettingTab(new TimelineSettingTab(this.app, this));
 
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, _ctx: MarkdownView | MarkdownFileInfo) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
+		// Listen for view state restoration to configure timeline views
+		this.registerEvent(
+			this.app.workspace.on('layout-change', () => {
+				this.configureTimelineViews();
+			})
+		);
 
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-		
+		// Listen for file rename events to update cache
+		this.registerEvent(
+			this.app.vault.on('rename', (file, oldPath) => {
+				if (file instanceof TFile) {
+					this.cacheService.handleFileRename(oldPath, file.path);
+				}
+			})
+		);
+
 		console.log("Timeline plugin loaded");
 	}
 
 	onunload() {
+		// Force save cache before unloading
+		void this.cacheService.forceSave();
 		this.app.workspace.detachLeavesOfType(VIEW_TYPE_TIMELINE);
 	}
 
-	async openTimelineView() {
-		const {workspace} = this.app;
+	/**
+	 * Find the first timeline that contains the given file path
+	 * Walks up the directory tree to find the most specific (deepest) matching timeline
+	 */
+	findTimelineForFile(filePath: string): TimelineViewConfig | null {
+		const timelines = this.settings.timelineViews;
+		if (timelines.length === 0) return null;
 
-		// Check if view is already open
-		const leaves = workspace.getLeavesOfType(VIEW_TYPE_TIMELINE);
-		if (leaves.length > 0) {
-			// View already exists, reveal it
-			const leaf = leaves[0];
-			if (leaf) {
-				workspace.revealLeaf(leaf);
+		// Get the directory path (remove filename)
+		const parts = filePath.split('/');
+		parts.pop(); // Remove filename
+
+		// Build list of all ancestor paths from most specific to least
+		const ancestorPaths: string[] = [];
+		for (let i = parts.length; i >= 0; i--) {
+			ancestorPaths.push(parts.slice(0, i).join('/'));
+		}
+
+		// Find the most specific (deepest) timeline that matches
+		for (const ancestorPath of ancestorPaths) {
+			const matchingTimeline = timelines.find(t => t.rootPath === ancestorPath);
+			if (matchingTimeline) {
+				return matchingTimeline;
 			}
+		}
+
+		// Fall back to vault-wide timeline if it exists
+		const allTimeline = timelines.find(t => t.rootPath === "");
+		return allTimeline ?? null;
+	}
+
+	/**
+	 * Configure any timeline views that need their config loaded
+	 */
+	private configureTimelineViews(): void {
+		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_TIMELINE);
+		for (const leaf of leaves) {
+			const view = leaf.view;
+			// Check if view is actually a TimelineView with the required method
+			// (during startup, view might not be fully initialized yet)
+			if (view instanceof TimelineView && view.getTimelineId && view.getTimelineId()) {
+				const config = this.settings.timelineViews.find(t => t.id === view.getTimelineId());
+				if (config) {
+					view.setTimelineConfig(config);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Open the timeline selector modal (fuzzy finder)
+	 */
+	openTimelineSelector(): void {
+		const timelines = this.settings.timelineViews;
+
+		if (timelines.length === 0) {
+			new Notice('No timelines configured. Open settings to create one.');
 			return;
+		}
+
+		// If only one timeline, open it directly
+		if (timelines.length === 1) {
+			void this.openTimelineView(timelines[0]!);
+			return;
+		}
+
+		// Show fuzzy finder for multiple timelines
+		new TimelineSelectorModal(
+			this.app,
+			timelines,
+			(timeline) => void this.openTimelineView(timeline)
+		).open();
+	}
+
+	/**
+	 * Open a specific timeline view
+	 */
+	async openTimelineView(config: TimelineViewConfig): Promise<void> {
+		const { workspace } = this.app;
+
+		// Check if a view with this timeline ID is already open
+		const leaves = workspace.getLeavesOfType(VIEW_TYPE_TIMELINE);
+		for (const leaf of leaves) {
+			const view = leaf.view as TimelineView;
+			if (view && view.getTimelineId() === config.id) {
+				// View already exists, reveal it
+				workspace.revealLeaf(leaf);
+				return;
+			}
 		}
 
 		// Create a new leaf in the right sidebar
@@ -143,39 +244,54 @@ export default class MyPlugin extends Plugin {
 			return;
 		}
 
-		// Open the Timeline view
+		// Open the Timeline view with state
 		await leaf.setViewState({
 			type: VIEW_TYPE_TIMELINE,
-			active: true
+			active: true,
+			state: {
+				timelineId: config.id
+			}
 		});
+
+		// Configure the view with the timeline config
+		const view = leaf.view as TimelineView;
+		if (view) {
+			view.setTimelineConfig(config);
+		}
 
 		// Reveal the leaf
 		workspace.revealLeaf(leaf);
-		
-		console.log("Opened Timeline view");
+
+		console.log(`Opened Timeline view: ${config.name}`);
+	}
+
+	/**
+	 * Delete timeline data from cache when a timeline is deleted
+	 */
+	deleteTimelineCache(timelineId: string): void {
+		this.cacheService.deleteTimeline(timelineId);
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		const savedData = await this.loadData() as Partial<MyPluginSettings> | null;
+		
+		// Handle migration: if no settings exist, create defaults
+		if (!savedData || !savedData.timelineViews) {
+			this.settings = { ...DEFAULT_SETTINGS };
+		} else {
+			this.settings = {
+				timelineViews: savedData.timelineViews
+			};
+		}
+
+		// Ensure at least one timeline exists (create "All" if empty)
+		if (this.settings.timelineViews.length === 0) {
+			this.settings.timelineViews.push(createDefaultAllTimeline());
+			await this.saveSettings();
+		}
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
 	}
 }

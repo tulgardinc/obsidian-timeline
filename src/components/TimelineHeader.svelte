@@ -18,6 +18,7 @@
 		selectedCard?: CardHoverData | null;
 		isAnyCardResizing?: boolean;
 		activeResizeEdge?: 'left' | 'right' | null;
+		timelineName?: string;
 	}
 
 	let { 
@@ -28,7 +29,8 @@
 		isHovering, 
 		selectedCard = null, 
 		isAnyCardResizing = false, 
-		activeResizeEdge = null 
+		activeResizeEdge = null,
+		timelineName = "Timeline"
 	}: Props = $props();
 
 	// Calculate current scale level based on timeScale pixel density
@@ -76,6 +78,9 @@
 	<div class="timeline-layer">
 		<!-- Scale unit indicator - behind markers at top-left -->
 		<div class="scale-unit-label">{currentUnitName()}</div>
+		
+		<!-- Timeline name - at top-right at same height as scale unit -->
+		<div class="timeline-name-label">{timelineName}</div>
 		
 		<!-- Dynamic markers based on scale level -->
 		{#each visibleMarkers() as marker (marker.unitIndex)}
@@ -264,6 +269,21 @@
 		position: absolute;
 		top: 2px;
 		left: 8px;
+		font-size: 12px;
+		font-family: var(--font-monospace);
+		color: var(--text-muted);
+		opacity: 0.6;
+		text-transform: capitalize;
+		z-index: 0;
+		pointer-events: none;
+		user-select: none;
+	}
+
+	/* Timeline name label - at top-right at same height as scale unit */
+	.timeline-name-label {
+		position: absolute;
+		top: 2px;
+		right: 8px;
 		font-size: 12px;
 		font-family: var(--font-monospace);
 		color: var(--text-muted);

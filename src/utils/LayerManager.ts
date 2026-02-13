@@ -8,7 +8,8 @@ export interface LayerableItem {
 	dateStart: TimelineDate;
 	dateEnd: TimelineDate;
 	layer?: number;
-	frontmatterLayer?: number;
+	// Internal property used by cache service to pass preferred layer
+	cachedLayer?: number;
 	color?: TimelineColor;
 }
 
@@ -72,13 +73,16 @@ export class LayerManager {
 	/**
 	 * Assign layers to items using alternating search pattern:
 	 * +1, -1, +2, -2, +3, -3, ...
+	 * 
+	 * Uses cachedLayer if available, otherwise defaults to 0
 	 */
 	static assignLayers(items: LayerableItem[]): LayerAssignment[] {
 		const assignments: LayerAssignment[] = [];
 		const processedItems: LayerableItem[] = [];
 
 		for (const item of items) {
-			const preferredLayer = item.frontmatterLayer ?? 0;
+			// Use cached layer as preferred, default to 0
+			const preferredLayer = item.cachedLayer ?? 0;
 			const previousLayer = item.layer;
 
 			// Try preferred layer first
@@ -114,7 +118,7 @@ export class LayerManager {
 			}
 
 			// Record the assignment if layer changed
-			if (item.layer !== previousLayer || item.layer !== (item.frontmatterLayer ?? 0)) {
+			if (item.layer !== previousLayer) {
 				assignments.push({
 					file: item.file,
 					layer: item.layer!,

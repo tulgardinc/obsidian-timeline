@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { onMount, tick } from "svelte";
 	import GridLines from "./GridLines.svelte";
 	import TimelineHeader from "./TimelineHeader.svelte";
 	import { setViewportContext } from "../contexts/ViewportContext";
@@ -14,6 +14,95 @@
 	}
 
 	const PIXELS_PER_DAY = 10;
+
+	// Clamp limits: viewport cannot show beyond ±20B years
+	const MAX_YEAR = 20_000_000_000; // ±20 billion years
+	const DAYS_PER_YEAR = 365.2425; // Gregorian calendar average
+	const MAX_DAYS_FROM_EPOCH = MAX_YEAR * DAYS_PER_YEAR;
+
+	// Y-axis zoom limits: 50% to 200%
+	const MIN_SCALE = 0.5;
+	const MAX_SCALE = 2.0;
+
+	/**
+	 * Calculate the minimum timeScale to ensure viewport never exceeds ±20B years
+	 * Minimum timeScale = viewportWidth / (2 * MAX_DAYS_FROM_EPOCH)
+	 * This ensures the left edge can't go beyond -20B and right edge beyond +20B
+	 */
+	function getMinTimeScale(): number {
+		if (viewportWidth <= 0) return 0.001; // Fallback for zero-width
+		return viewportWidth / (2 * MAX_DAYS_FROM_EPOCH);
+	}
+
+	/**
+	 * Clamp timeScale to minimum value
+	 */
+	function clampTimeScale(newTimeScale: number): number {
+		const minTimeScale = getMinTimeScale();
+		return Math.max(minTimeScale, newTimeScale);
+	}
+
+	/**
+	 * Get allowed translateX range
+	 * Returns [minTranslateX, maxTranslateX]
+	 * At minimum zoom, left edge = -MAX_DAYS_FROM_EPOCH, right edge = +MAX_DAYS_FROM_EPOCH
+	 */
+	function getTranslateXRange(): [number, number] {
+		const minTimeScale = getMinTimeScale();
+		// Ensure we're at minimum zoom level for clamping calculation
+		// At min timeScale: viewport spans 2*MAX_DAYS_FROM_EPOCH days
+		// translateX = 0 means left edge of viewport is at day 0 (year 1970)
+		// To show -20B BCE on left edge: translateX must be <= 0 (0 - 0 = 0)
+		// To show +20B CE on right edge: viewportWidth / timeScale = rightEdgeDay
+		// At min timeScale: viewportWidth / minTimeScale = 2*MAX_DAYS_FROM_EPOCH
+		// Right edge = -translateX / timeScale + viewportWidth / timeScale
+		// For right edge to be MAX_DAYS_FROM_EPOCH:
+		// -translateX / timeScale + 2*MAX_DAYS_FROM_EPOCH = MAX_DAYS_FROM_EPOCH
+		// => -translateX / timeScale = -MAX_DAYS_FROM_EPOCH
+		// => translateX = MAX_DAYS_FROM_EPOCH * timeScale
+		
+		// Actually simpler: when translateX = 0, left edge is at worldX = 0
+		// To show -MAX_DAYS on left edge: worldX = 0 + translateX, so need translateX >= 0 (wait no)
+		// screenX = worldX + translateX, so left edge (screenX=0) means worldX = -translateX
+		// We want left edge worldX >= -MAX_DAYS_FROM_EPOCH
+		// -translateX >= -MAX_DAYS_FROM_EPOCH => translateX <= MAX_DAYS_FROM_EPOCH * timeScale
+		// We want right edge worldX <= MAX_DAYS_FROM_EPOCH
+		// Right edge: screenX = viewportWidth, worldX = viewportWidth - translateX
+		// viewportWidth - translateX <= MAX_DAYS_FROM_EPOCH * timeScale
+		// -translateX <= MAX_DAYS_FROM_EPOCH * timeScale - viewportWidth
+		// translateX >= viewportWidth - MAX_DAYS_FROM_EPOCH * timeScale
+		
+		const maxWorldWidth = MAX_DAYS_FROM_EPOCH * 2 * minTimeScale; // At min zoom, spans full range
+		const currentWorldWidth = Math.min(viewportWidth, maxWorldWidth);
+		
+		// Left edge constraint: worldX at screenX=0 must be >= -MAX_DAYS_FROM_EPOCH
+		// worldX = screenX - translateX = -translateX (at left edge)
+		// -translateX >= -MAX_DAYS_FROM_EPOCH * timeScale => translateX <= MAX_DAYS_FROM_EPOCH * timeScale
+		const maxTranslateX = MAX_DAYS_FROM_EPOCH * timeScale;
+		
+		// Right edge constraint: worldX at screenX=viewportWidth must be <= MAX_DAYS_FROM_EPOCH
+		// worldX = viewportWidth - translateX <= MAX_DAYS_FROM_EPOCH * timeScale
+		// -translateX <= MAX_DAYS_FROM_EPOCH * timeScale - viewportWidth
+		// translateX >= viewportWidth - MAX_DAYS_FROM_EPOCH * timeScale
+		const minTranslateX = viewportWidth - MAX_DAYS_FROM_EPOCH * timeScale;
+		
+		return [minTranslateX, maxTranslateX];
+	}
+
+	/**
+	 * Clamp translateX to keep viewport within ±20B years
+	 */
+	function clampTranslateX(newTranslateX: number): number {
+		const [minTranslateX, maxTranslateX] = getTranslateXRange();
+		return Math.max(minTranslateX, Math.min(maxTranslateX, newTranslateX));
+	}
+
+	/**
+	 * Clamp scale (Y-axis zoom) to keep within 50% to 200%
+	 */
+	function clampScale(newScale: number): number {
+		return Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+	}
 
 	// Calculate cursor screen X position for the dashed line
 	// X-axis: screenX = worldX + translateX (no scale)
@@ -54,6 +143,9 @@
 	// Debounce timer for forcing crisp render after zoom
 	let zoomDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let forceRender = $state(0);
+	
+	// Debounce timer for viewport change notifications
+	let viewportChangeTimer: ReturnType<typeof setTimeout> | null = null;
 
 	let viewportRef: HTMLDivElement;
 
@@ -67,9 +159,12 @@
 		isAnyCardDragging?: boolean;
 		isAnyCardResizing?: boolean;
 		activeResizeEdge?: 'left' | 'right' | null;
+		initialViewport?: { centerX: number; centerY: number; timeScale: number } | null;
+		onViewportChanged?: () => void;
+		timelineName?: string;
 	}
 
-	let { children, onScaleChange, onViewportChange, onTimeScaleChange, selectedCard = null, onCanvasClick, isAnyCardDragging = false, isAnyCardResizing = false, activeResizeEdge = null }: Props = $props();
+	let { children, onScaleChange, onViewportChange, onTimeScaleChange, selectedCard = null, onCanvasClick, isAnyCardDragging = false, isAnyCardResizing = false, activeResizeEdge = null, initialViewport = null, onViewportChanged, timelineName = "Timeline" }: Props = $props();
 
 	// Set viewport context for child components
 	// Use a getter function to always get current values
@@ -135,6 +230,18 @@
 			});
 		}, 150);
 	}
+	
+	function notifyViewportChanged(source: string) {
+		// Debounce viewport change notifications to avoid excessive saves
+		if (viewportChangeTimer) {
+			clearTimeout(viewportChangeTimer);
+		}
+		console.log(`InfiniteCanvas: Viewport change scheduled from: ${source}`);
+		viewportChangeTimer = setTimeout(() => {
+			console.log(`InfiniteCanvas: Viewport change firing (source: ${source})`);
+			onViewportChanged?.();
+		}, 300);
+	}
 
 	function handleWheel(event: WheelEvent) {
 		event.preventDefault();
@@ -159,8 +266,8 @@
 				const zoomMultiplier = 1 + delta;
 				
 				// Calculate new values for both scale and timeScale
-				const newScale = scale * zoomMultiplier;
-				const newTimeScale = timeScale * zoomMultiplier;
+				const newScale = clampScale(scale * zoomMultiplier);
+				const newTimeScale = clampTimeScale(timeScale * zoomMultiplier);
 				
 				// Zoom towards center of viewport
 				const rect = viewportRef.getBoundingClientRect();
@@ -179,13 +286,16 @@
 				translateX = centerX - TimeScaleManager.dayToWorldX(worldCenterTime, timeScale);
 				translateY = centerY - worldY * scale;
 				
+				// Clamp translation to keep viewport within bounds
+				translateX = clampTranslateX(translateX);
+				
 				// Trigger crisp render after zoom
 				triggerCrispRender();
 			} else if (isCmdHeld) {
 				// Cmd + two-finger scroll = Time-scale zoom (zoom toward last known mouse position)
 				const zoomFactor = 0.1;
 				const delta = event.deltaY > 0 ? -zoomFactor : zoomFactor;
-				const newTimeScale = timeScale * (1 + delta);
+				const newTimeScale = clampTimeScale(timeScale * (1 + delta));
 				
 				// Use last known mouse position, or center if mouse not in viewport
 				const rect = viewportRef.getBoundingClientRect();
@@ -199,6 +309,9 @@
 				
 				// Adjust translation to keep zoom center over same world time
 				translateX = zoomCenterX - TimeScaleManager.dayToWorldX(worldCenterTime, timeScale);
+				
+				// Clamp translation to keep viewport within bounds
+				translateX = clampTranslateX(translateX);
 			} else {
 				// Two-finger scroll without modifier = Pan
 				translateX -= event.deltaX;
@@ -210,7 +323,7 @@
 				// Ctrl/Cmd + wheel = Time-scale zoom (zoom toward mouse cursor)
 				const zoomFactor = 0.1;
 				const delta = event.deltaY > 0 ? -zoomFactor : zoomFactor;
-				const newTimeScale = timeScale * (1 + delta);
+				const newTimeScale = clampTimeScale(timeScale * (1 + delta));
 				
 				// Get mouse position within viewport
 				const rect = viewportRef.getBoundingClientRect();
@@ -224,6 +337,9 @@
 				
 				// Adjust translation to keep mouse position over same world time
 				translateX = mouseXPos - TimeScaleManager.dayToWorldX(worldMouseTime, timeScale);
+				
+				// Clamp translation to keep viewport within bounds
+				translateX = clampTranslateX(translateX);
 			} else {
 				// Mouse wheel alone = Unified zoom (scale + timeScale together to preserve aspect ratio)
 				const zoomFactor = 0.1;
@@ -231,8 +347,8 @@
 				const zoomMultiplier = 1 + delta;
 				
 				// Calculate new values for both scale and timeScale
-				const newScale = scale * zoomMultiplier;
-				const newTimeScale = timeScale * zoomMultiplier;
+				const newScale = clampScale(scale * zoomMultiplier);
+				const newTimeScale = clampTimeScale(timeScale * zoomMultiplier);
 				
 				// Zoom towards mouse position
 				const rect = viewportRef.getBoundingClientRect();
@@ -251,10 +367,16 @@
 				translateX = mouseXPos - TimeScaleManager.dayToWorldX(worldCenterTime, timeScale);
 				translateY = mouseYPos - worldY * scale;
 				
+				// Clamp translation to keep viewport within bounds
+				translateX = clampTranslateX(translateX);
+				
 				// Trigger crisp render after zoom
 				triggerCrispRender();
 			}
 		}
+		
+		// Notify of viewport change after any wheel interaction
+		notifyViewportChanged('wheel');
 	}
 
 	function handleMouseMove(event: MouseEvent) {
@@ -275,8 +397,14 @@
 		translateX += deltaX;
 		translateY += deltaY;
 		
+		// Clamp translation to keep viewport within bounds during panning
+		translateX = clampTranslateX(translateX);
+		
 		lastMouseX = event.clientX;
 		lastMouseY = event.clientY;
+		
+		// Notify of viewport change (debounced) - only during actual panning
+		notifyViewportChanged('pan-move');
 	}
 
 	function handleMouseDown(event: MouseEvent) {
@@ -291,6 +419,8 @@
 
 	function handleMouseUp() {
 		isPanning = false;
+		// Notify of viewport change (debounced) - pan ended
+		notifyViewportChanged('pan-end');
 	}
 
 	function handleMouseLeave() {
@@ -346,8 +476,14 @@
 			translateX += deltaX;
 			translateY += deltaY;
 			
+			// Clamp translation to keep viewport within bounds during touch panning
+			translateX = clampTranslateX(translateX);
+			
 			lastMouseX = touch.clientX;
 			lastMouseY = touch.clientY;
+			
+			// Notify of viewport change during touch pan (debounced)
+			notifyViewportChanged('touch-pan');
 		} else if (event.touches.length === 2) {
 			// Pinch zoom = Unified zoom (scale + timeScale together to preserve aspect ratio)
 			const touch1 = event.touches[0];
@@ -365,18 +501,23 @@
 			const worldCenterTime = TimeScaleManager.screenXToDay(centerX, timeScale, translateX);
 			const worldY = (centerY - translateY) / scale;
 			
-			// Apply new scale values (both scale and timeScale together)
-			scale = scale * scaleFactor;
-			timeScale = timeScale * scaleFactor;
+			// Apply new scale values (both scale and timeScale together) with clamping
+			scale = clampScale(scale * scaleFactor);
+			timeScale = clampTimeScale(timeScale * scaleFactor);
 			
 			// Adjust translation to keep center over same world position using centralized utilities
 			translateX = centerX - TimeScaleManager.dayToWorldX(worldCenterTime, timeScale);
 			translateY = centerY - worldY * scale;
 			
+			// Clamp translation to keep viewport within bounds
+			translateX = clampTranslateX(translateX);
+			
 			lastTouchDistance = newDistance;
 			
-			// Trigger crisp render after zoom
-			triggerCrispRender();
+				// Trigger crisp render after zoom
+				triggerCrispRender();
+				// Notify of viewport change (debounced)
+				notifyViewportChanged('touch-pinch');
 		}
 	}
 
@@ -385,6 +526,8 @@
 		lastTouchDistance = 0;
 		// Trigger crisp render after touch gesture ends
 		triggerCrispRender();
+		// Notify of viewport change (debounced)
+		notifyViewportChanged('touch-end');
 	}
 
 	function resetZoom() {
@@ -446,7 +589,7 @@
 
 		// Calculate new timeScale: viewportWidth pixels / cardDurationDays
 		// This makes the card fill the entire viewport width (edge to edge)
-		const newTimeScale = rect.width / cardDurationDays;
+		const newTimeScale = clampTimeScale(rect.width / cardDurationDays);
 
 		// Apply the new timeScale
 		timeScale = newTimeScale;
@@ -455,6 +598,9 @@
 		const cardCenterDay = cardStartDay + cardDurationDays / 2;
 		const centerWorldX = TimeScaleManager.dayToWorldX(cardCenterDay, timeScale);
 		translateX = TimeScaleManager.calculateTranslateXToCenterWorldX(centerWorldX, rect.width);
+		
+		// Clamp translation to keep viewport within bounds
+		translateX = clampTranslateX(translateX);
 	}
 
 	// Update viewport dimensions
@@ -466,10 +612,69 @@
 		}
 	}
 
+	// Get current viewport state for persistence
+	export function getViewport(): { centerX: number; centerY: number; timeScale: number; scale: number } | null {
+		const rect = viewportRef?.getBoundingClientRect();
+		if (!rect) return null;
+		
+		const centerTime = getCenterTime();
+		if (centerTime === null) return null;
+		
+		// Get the time at the left edge to calculate centerX in world coordinates
+		const leftEdgeTime = TimeScaleManager.screenXToDay(0, timeScale, translateX);
+		const centerWorldX = TimeScaleManager.dayToWorldX(centerTime, timeScale);
+		
+		// Y center is middle of viewport
+		const centerScreenY = rect.height / 2;
+		const centerWorldY = (centerScreenY - translateY) / scale;
+		
+		return {
+			centerX: centerWorldX,
+			centerY: centerWorldY,
+			timeScale: timeScale,
+			scale: scale // Include Y-axis zoom level
+		};
+	}
+
+	// Set viewport state from persistence
+	export function setViewport(viewport: { centerX: number; centerY: number; timeScale: number; scale?: number }) {
+		const rect = viewportRef?.getBoundingClientRect();
+		if (!rect) return;
+		
+		// Clamp timeScale to ensure we don't zoom out beyond the 20B year limit
+		timeScale = clampTimeScale(viewport.timeScale);
+		
+		// Restore Y-axis zoom level (default to 1 if not present in old caches)
+		scale = clampScale(viewport.scale ?? 1);
+		
+		// Calculate translateX to center on centerX
+		translateX = TimeScaleManager.calculateTranslateXToCenterWorldX(viewport.centerX, rect.width);
+		
+		// Clamp translation to keep viewport within bounds
+		translateX = clampTranslateX(translateX);
+		
+		// Calculate translateY to center on centerY
+		translateY = TimeScaleManager.calculateTranslateYToCenterWorldY(viewport.centerY, scale, rect.height);
+	}
+
 	// Center the view initially
 	onMount(() => {
-		updateViewportDimensions();
-		centerView();
+		// Wait for DOM to be fully ready using a microtask
+		void tick().then(() => {
+			updateViewportDimensions();
+			
+			// Load initial viewport if provided, otherwise center
+			if (initialViewport) {
+				console.log('InfiniteCanvas: Loading initial viewport:', initialViewport);
+				// Small delay to ensure container has proper dimensions
+				setTimeout(() => {
+					setViewport(initialViewport);
+				}, 0);
+			} else {
+				console.log('InfiniteCanvas: No initial viewport, centering view');
+				centerView();
+			}
+		});
 		
 		// Use ResizeObserver to detect ANY viewport size changes
 		// This catches dev tools, Obsidian panel resizing, split views, etc.
@@ -520,6 +725,7 @@
 		selectedCard={selectedCard}
 		isAnyCardResizing={isAnyCardResizing}
 		activeResizeEdge={activeResizeEdge}
+		timelineName={timelineName}
 	/>
 	
 	<!-- Dashed cursor line spanning full viewport height -->
