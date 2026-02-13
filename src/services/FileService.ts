@@ -1,5 +1,6 @@
 import { type App, TFile } from 'obsidian';
 import { LayerManager, type LayerableItem } from '../utils/LayerManager';
+import { debug } from '../utils/debug';
 import { TimeScaleManager } from '../utils/TimeScaleManager';
 import { TimelineDate } from '../utils/TimelineDate';
 import type { TimelineItem } from '../stores/timelineStore';
@@ -71,7 +72,7 @@ export class FileService {
 			const dateEndRaw = metadata.frontmatter['date-end'];
 
 			if (!dateStartRaw || !dateEndRaw) {
-				console.log(`Timeline: Skipping ${file.basename} - missing date-start or date-end`);
+				debug('FileService', `Skipping ${file.basename} - missing date-start or date-end`);
 				continue;
 			}
 
@@ -79,7 +80,7 @@ export class FileService {
 			const dateEnd = TimelineDate.fromString(String(dateEndRaw));
 
 			if (!dateStart || !dateEnd) {
-				console.log(`Timeline: Skipping ${file.basename} - invalid date format`);
+				debug('FileService', `Skipping ${file.basename} - invalid date format`);
 				continue;
 			}
 
@@ -119,14 +120,21 @@ export class FileService {
 	}
 
 	/**
-	 * Update file dates
+	 * Update file dates (instance method)
 	 */
 	async updateFileDates(file: TFile, dateStart: string, dateEnd: string): Promise<void> {
-		const content = await this.app.vault.read(file);
+		await FileService.updateFileDatesStatic(this.app, file, dateStart, dateEnd);
+	}
+
+	/**
+	 * Update file dates (static - usable without a FileService instance)
+	 */
+	static async updateFileDatesStatic(app: App, file: TFile, dateStart: string, dateEnd: string): Promise<void> {
+		const content = await app.vault.read(file);
 		const newContent = content
 			.replace(/date-start:\s*\S+/, `date-start: ${dateStart}`)
 			.replace(/date-end:\s*\S+/, `date-end: ${dateEnd}`);
-		await this.app.vault.modify(file, newContent);
+		await app.vault.modify(file, newContent);
 	}
 
 	/**

@@ -13,8 +13,6 @@
 		title: string;
 	}
 
-	const PIXELS_PER_DAY = 10;
-
 	// Clamp limits: viewport cannot show beyond ±20B years
 	const MAX_YEAR = 20_000_000_000; // ±20 billion years
 	const DAYS_PER_YEAR = 365.2425; // Gregorian calendar average

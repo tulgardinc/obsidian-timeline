@@ -405,16 +405,16 @@ describe('screenToWorld', () => {
     expect(result.worldY).toBe(350);  // (300 - (-50)) / 1
   });
 
-  it('should account for scale', () => {
+  it('should account for scale (Y only, X unaffected)', () => {
     const result = screenToWorld(400, 300, 2, 0, 0);
-    expect(result.worldX).toBe(200);  // 400 / 2
-    expect(result.worldY).toBe(150);  // 300 / 2
+    expect(result.worldX).toBe(400);  // X: no scale, 400 - 0
+    expect(result.worldY).toBe(150);  // Y: (300 - 0) / 2
   });
 
   it('should handle combined scale and translation', () => {
     const result = screenToWorld(400, 300, 2, -100, -50);
-    expect(result.worldX).toBe(250);  // (400 - (-100)) / 2
-    expect(result.worldY).toBe(175);  // (300 - (-50)) / 2
+    expect(result.worldX).toBe(500);  // X: no scale, 400 - (-100)
+    expect(result.worldY).toBe(175);  // Y: (300 - (-50)) / 2
   });
 });
 
@@ -431,16 +431,16 @@ describe('worldToScreen', () => {
     expect(result.screenY).toBe(250);  // 300 * 1 + (-50)
   });
 
-  it('should account for scale', () => {
+  it('should account for scale (Y only, X unaffected)', () => {
     const result = worldToScreen(400, 300, 2, 0, 0);
-    expect(result.screenX).toBe(800);  // 400 * 2
-    expect(result.screenY).toBe(600);  // 300 * 2
+    expect(result.screenX).toBe(400);  // X: no scale, 400 + 0
+    expect(result.screenY).toBe(600);  // Y: 300 * 2 + 0
   });
 
   it('should handle combined scale and translation', () => {
     const result = worldToScreen(400, 300, 2, -100, -50);
-    expect(result.screenX).toBe(700);  // 400 * 2 + (-100)
-    expect(result.screenY).toBe(550);  // 300 * 2 + (-50)
+    expect(result.screenX).toBe(300);  // X: no scale, 400 + (-100)
+    expect(result.screenY).toBe(550);  // Y: 300 * 2 + (-50)
   });
 
   it('should be inverse of screenToWorld', () => {

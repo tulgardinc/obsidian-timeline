@@ -277,9 +277,8 @@ export class TimeScaleManager {
 	): Marker[] {
 		const markers: Marker[] = [];
 		
-		// Get start and end dates using TimelineDate
+		// Get start date using TimelineDate
 		const startDate = TimelineDate.fromDaysFromEpoch(startDay);
-		const endDate = TimelineDate.fromDaysFromEpoch(endDay);
 		
 		// Start from the first day of the start month
 		let currentYear = startDate.getYear();

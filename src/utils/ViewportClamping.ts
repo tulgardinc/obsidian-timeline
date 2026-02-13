@@ -1,3 +1,14 @@
+/**
+ * ViewportClamping - clamped bounds for timeline cards.
+ *
+ * COORDINATE SYSTEM (matches the rest of the codebase):
+ *   X-axis: screenX = worldX + translateX       (NO scale)
+ *   Y-axis: screenY = worldY * scale + translateY
+ *
+ * When a card extends beyond the viewport edges it is visually
+ * clamped while its world coordinates stay intact for interactions.
+ */
+
 export interface ClampedBounds {
 	visualX: number;
 	visualWidth: number;
@@ -8,56 +19,28 @@ export interface ClampedBounds {
 }
 
 /**
- * Calculate viewport-clamped bounds for timeline cards.
- * When cards extend beyond the viewport edges, they are visually clamped
- * while maintaining their actual world coordinates for interactions.
- * 
- * This implementation performs visibility checks using relative coordinates
- * from viewport center to minimize floating-point precision errors when
- * worldX is very large (billions of pixels from origin).
+ * Calculate viewport-clamped bounds for a timeline card.
+ *
+ * `scale` is accepted for API compatibility but is NOT applied
+ * to X-axis calculations (consistent with the project-wide rule
+ * that scale only affects the Y axis).
  */
 export function calculateClampedBounds(
 	worldX: number,
 	worldWidth: number,
-	scale: number,
+	_scale: number,
 	translateX: number,
-	viewportWidth: number
+	viewportWidth: number,
 ): ClampedBounds {
-	// Handle edge cases
-	if (scale === 0) {
-		return {
-			visualX: worldX,
-			visualWidth: 0,
-			isClampedLeft: false,
-			isClampedRight: false,
-			isClampedBoth: false,
-			isCompletelyOutside: true
-		};
-	}
+	// X-axis: screenX = worldX + translateX (no scale)
+	const screenLeft = worldX + translateX;
+	const screenRight = screenLeft + worldWidth;
 
-	// Calculate viewport center in world coordinates
-	// This gives us a reference point close to both the viewport and card
-	const viewportCenterWorld = -(translateX - viewportWidth / 2) / scale;
-	
-	// Calculate card position relative to viewport center
-	// This keeps numbers small and preserves precision
-	const cardLeftRel = worldX - viewportCenterWorld;
-	const cardRightRel = cardLeftRel + worldWidth;
-	
-	// Viewport half-width in world coordinates
-	const viewportHalfWidthWorld = (viewportWidth / 2) / scale;
-	
-	// Viewport edges relative to center
-	const viewportLeftRel = -viewportHalfWidthWorld;
-	const viewportRightRel = viewportHalfWidthWorld;
-
-	// Visibility checks using RELATIVE coordinates
-	const isClampedLeft = cardLeftRel < viewportLeftRel;
-	const isClampedRight = cardRightRel > viewportRightRel;
+	const isClampedLeft = screenLeft < 0;
+	const isClampedRight = screenRight > viewportWidth;
 	const isClampedBoth = isClampedLeft && isClampedRight;
-	const isCompletelyOutside = cardRightRel < viewportLeftRel || cardLeftRel > viewportRightRel;
+	const isCompletelyOutside = screenRight < 0 || screenLeft > viewportWidth;
 
-	// Calculate visual bounds in WORLD coordinates
 	let visualX: number;
 	let visualWidth: number;
 
@@ -65,14 +48,14 @@ export function calculateClampedBounds(
 		visualX = worldX;
 		visualWidth = 0;
 	} else if (isClampedBoth) {
-		visualX = viewportCenterWorld + viewportLeftRel;
-		visualWidth = viewportRightRel - viewportLeftRel;
+		visualX = -translateX; // world X at screen-left edge
+		visualWidth = viewportWidth;
+	} else if (isClampedLeft) {
+		visualX = -translateX;
+		visualWidth = screenRight;
 	} else if (isClampedRight) {
 		visualX = worldX;
-		visualWidth = (viewportCenterWorld + viewportRightRel) - worldX;
-	} else if (isClampedLeft) {
-		visualX = viewportCenterWorld + viewportLeftRel;
-		visualWidth = cardRightRel - viewportLeftRel;
+		visualWidth = viewportWidth - screenLeft;
 	} else {
 		visualX = worldX;
 		visualWidth = worldWidth;
@@ -84,43 +67,44 @@ export function calculateClampedBounds(
 		isClampedLeft,
 		isClampedRight,
 		isClampedBoth,
-		isCompletelyOutside
+		isCompletelyOutside,
 	};
 }
 
 /**
- * Convert screen coordinates to world coordinates
+ * Convert screen coordinates to world coordinates.
+ *
+ * X: worldX = screenX - translateX        (no scale)
+ * Y: worldY = (screenY - translateY) / scale
  */
 export function screenToWorld(
 	screenX: number,
 	screenY: number,
 	scale: number,
 	translateX: number,
-	translateY: number
+	translateY: number,
 ): { worldX: number; worldY: number } {
 	return {
-		worldX: (screenX - translateX) / scale,
-		worldY: (screenY - translateY) / scale
+		worldX: screenX - translateX,
+		worldY: scale === 0 ? 0 : (screenY - translateY) / scale,
 	};
 }
 
 /**
- * Convert world coordinates to screen coordinates
- * 
- * Note: This function may suffer from floating-point precision loss
- * when worldX is very large and scale is high. Use sparingly for
- * coordinate conversion, and prefer world-coordinate calculations
- * for visibility/clamping logic.
+ * Convert world coordinates to screen coordinates.
+ *
+ * X: screenX = worldX + translateX         (no scale)
+ * Y: screenY = worldY * scale + translateY
  */
 export function worldToScreen(
 	worldX: number,
 	worldY: number,
 	scale: number,
 	translateX: number,
-	translateY: number
+	translateY: number,
 ): { screenX: number; screenY: number } {
 	return {
-		screenX: worldX * scale + translateX,
-		screenY: worldY * scale + translateY
+		screenX: worldX + translateX,
+		screenY: worldY * scale + translateY,
 	};
 }

@@ -1,11 +1,12 @@
 import { type App, TFile } from 'obsidian';
 import { LayerManager, type LayerableItem, type LayerAssignment } from '../utils/LayerManager';
+import { debug } from '../utils/debug';
 
 /**
  * Viewport state for a timeline (camera position and zoom)
  * centerDay is preferred (time-scale independent), centerX is kept for backward compatibility
  */
-export interface ViewportState {
+export interface CachedViewportState {
 	centerX: number;  // Legacy: worldX coordinate (deprecated, use centerDay instead)
 	centerDay: number; // Preferred: days from epoch at viewport center (time-scale independent)
 	centerY: number;
@@ -34,7 +35,7 @@ export interface TimelineCardData {
  * Data for a single timeline
  */
 export interface TimelineData {
-	viewport: ViewportState;
+	viewport: CachedViewportState;
 	notes: Record<string, TimelineNoteData>; // Key is note ID
 	timelineCards?: Record<string, TimelineCardData>; // Key is referenced timeline ID
 }
@@ -94,20 +95,17 @@ export class TimelineCacheService {
 				// Validate version
 				if (parsed.version === CACHE_VERSION) {
 					this.cache = parsed;
-					console.log('Timeline Cache: Loaded cache from disk:', Object.keys(this.cache.timelines).length, 'timelines');
-					for (const [id, data] of Object.entries(this.cache.timelines)) {
-						console.log(`  - Timeline ${id}: viewport=`, data.viewport, `notes=${Object.keys(data.notes).length}`);
-					}
+					debug('Cache', 'Loaded from disk:', Object.keys(this.cache.timelines).length, 'timelines');
 				} else {
-					console.log(`Timeline Cache: Version mismatch (${parsed.version} vs ${CACHE_VERSION}), resetting`);
+					debug('Cache', `Version mismatch (${parsed.version} vs ${CACHE_VERSION}), resetting`);
 					this.cache = { version: CACHE_VERSION, timelines: {} };
 				}
 			} else {
-				console.log('Timeline Cache: No cache file found at', CACHE_FILE_PATH);
+				debug('Cache', 'No cache file found at', CACHE_FILE_PATH);
 			}
 		} catch (error) {
 			// Cache doesn't exist yet or is corrupted - start fresh
-			console.log('Timeline Cache: No existing cache found or error loading, creating new:', error);
+			debug('Cache', 'No existing cache found or error loading, creating new:', error);
 			this.cache = { version: CACHE_VERSION, timelines: {} };
 		}
 	}
@@ -136,13 +134,13 @@ export class TimelineCacheService {
 			const dirPath = './timelines';
 			const dirExists = await this.app.vault.adapter.exists(dirPath);
 			if (!dirExists) {
-				console.log('Timeline Cache: Creating timelines directory');
+				debug('Cache', 'Creating timelines directory');
 				await this.app.vault.adapter.mkdir(dirPath);
 			}
 			
 			// Write the cache file
 			const content = JSON.stringify(this.cache, null, 2);
-			console.log('Timeline Cache: Saving cache to disk');
+			debug('Cache', 'Saving cache to disk');
 			
 			// Check if file exists using adapter (more reliable than getAbstractFileByPath)
 			const fileExists = await this.app.vault.adapter.exists(CACHE_FILE_PATH);
@@ -160,7 +158,7 @@ export class TimelineCacheService {
 				// File doesn't exist - create it
 				await this.app.vault.create(CACHE_FILE_PATH, content);
 			}
-			console.log('Timeline Cache: Save complete');
+			debug('Cache', 'Save complete');
 		} catch (error) {
 			console.error('Timeline: Failed to save cache:', error);
 		}
@@ -178,7 +176,7 @@ export class TimelineCacheService {
 	 */
 	private getOrCreateTimelineData(timelineId: string): TimelineData {
 		if (!this.cache.timelines[timelineId]) {
-			console.log(`Timeline Cache: Creating new timeline data for ${timelineId}`);
+			debug('Cache', `Creating new timeline data for ${timelineId}`);
 			this.cache.timelines[timelineId] = {
 				viewport: {
 					centerX: 0,
@@ -196,23 +194,23 @@ export class TimelineCacheService {
 	/**
 	 * Get viewport state for a timeline (returns null if no saved state)
 	 */
-	getViewport(timelineId: string): ViewportState | null {
+	getViewport(timelineId: string): CachedViewportState | null {
 		const data = this.getTimelineData(timelineId);
 		if (!data) {
-			console.log(`Timeline Cache: No cached viewport for timeline ${timelineId}`);
+			debug('Cache', `No cached viewport for timeline ${timelineId}`);
 			return null;
 		}
-		console.log(`Timeline Cache: Loaded viewport for ${timelineId}:`, data.viewport);
+		debug('Cache', `Loaded viewport for ${timelineId}:`, data.viewport);
 		return { ...data.viewport };
 	}
 
 	/**
 	 * Set viewport state for a timeline (debounced save)
 	 */
-	setViewport(timelineId: string, viewport: ViewportState): void {
+	setViewport(timelineId: string, viewport: CachedViewportState): void {
 		const data = this.getOrCreateTimelineData(timelineId);
 		data.viewport = { ...viewport };
-		console.log(`Timeline Cache: Saving viewport for ${timelineId}:`, viewport);
+		debug('Cache', `Saving viewport for ${timelineId}:`, viewport);
 		this.scheduleSave();
 	}
 

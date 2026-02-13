@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "obsidian-timeline-plugin",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "Display timeline cards on an infinite canvas with pan/zoom capabilities",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

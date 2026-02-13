@@ -1,5 +1,5 @@
 import { App, PluginSettingTab, Setting, FuzzySuggestModal, TFolder, Notice, Modal } from "obsidian";
-import type MyPlugin from "./main";
+import type TimelinePlugin from "./main";
 
 /**
  * Configuration for a single timeline view
@@ -10,7 +10,7 @@ export interface TimelineViewConfig {
 	rootPath: string;     // Root directory path (recursive scan), "" = vault root
 }
 
-export interface MyPluginSettings {
+export interface TimelinePluginSettings {
 	timelineViews: TimelineViewConfig[];
 }
 
@@ -32,7 +32,7 @@ export function createDefaultAllTimeline(): TimelineViewConfig {
 	};
 }
 
-export const DEFAULT_SETTINGS: MyPluginSettings = {
+export const DEFAULT_SETTINGS: TimelinePluginSettings = {
 	timelineViews: [createDefaultAllTimeline()]
 };
 
@@ -100,9 +100,9 @@ class FolderSuggestModal extends FuzzySuggestModal<TFolder> {
 }
 
 export class TimelineSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+	plugin: TimelinePlugin;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: TimelinePlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}

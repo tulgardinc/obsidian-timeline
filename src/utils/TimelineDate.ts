@@ -9,10 +9,6 @@
  * 10 billion years = 3.65 trillion days, well within safe integer range
  */
 
-const EPOCH_YEAR = 1970;
-const EPOCH_MONTH = 1;
-const EPOCH_DAY = 1;
-const DAYS_PER_YEAR = 365.2425; // Gregorian calendar average
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface ParsedDate {
