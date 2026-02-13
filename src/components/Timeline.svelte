@@ -25,7 +25,7 @@
 		onItemSelect: (index: number) => void;
 		onUpdateSelectionData: (startX: number, endX: number, startDate: string, endDate: string) => void;
 		onTimeScaleChange: (timeScale: number) => void;
-		onCanvasClick?: () => void;
+		onCanvasClick?: (event: { screenX: number; screenY: number; worldX: number; worldY: number }) => void;
 		// Callback to refresh items from parent
 		onRefreshItems?: () => TimelineItem[];
 		// Callback for context menu - parent uses Obsidian Menu API
@@ -110,6 +110,10 @@
 	let resizeStartState = $state<Map<number, { x: number; y: number; width: number }>>(new Map());
 	let moveStartState = $state<Map<number, { x: number; y: number }>>(new Map());
 
+	// Suppress next canvas click after card interaction (drag/resize) to prevent accidental note creation
+	let suppressNextCanvasClick = $state(false);
+	let suppressTimeout: ReturnType<typeof setTimeout> | null = null;
+
 	// Reference to InfiniteCanvas for viewport control
 	let infiniteCanvasRef: InfiniteCanvas;
 
@@ -120,11 +124,34 @@
 		}
 	}
 
-	function handleCanvasClick() {
+	function handleCanvasClick(event: { screenX: number; screenY: number; worldX: number; worldY: number }) {
+		// Guard: suppress clicks immediately after card interactions
+		if (suppressNextCanvasClick) {
+			suppressNextCanvasClick = false;
+			return;
+		}
+		
+		// Guard: ignore if any card is currently being dragged or resized
+		if (isAnyCardDragging || isAnyCardResizing) {
+			return;
+		}
+		
 		// Call parent's onCanvasClick if provided
 		if (onCanvasClick) {
-			onCanvasClick();
+			onCanvasClick(event);
 		}
+	}
+	
+	function setSuppressNextClick() {
+		suppressNextCanvasClick = true;
+		// Clear any existing timeout
+		if (suppressTimeout) {
+			clearTimeout(suppressTimeout);
+		}
+		// Auto-clear suppression after 100ms (enough to catch the immediate next click)
+		suppressTimeout = setTimeout(() => {
+			suppressNextCanvasClick = false;
+		}, 100);
 	}
 
 	function handleResize(index: number, edge: 'left' | 'right', deltaX: number, finished: boolean) {
@@ -190,6 +217,8 @@
 		isAnyCardResizing = false;
 		activeResizeEdge = null;
 		// Note: resizeStartState is cleared in handleResize when finished=true
+		// Suppress the next click to prevent accidental note creation
+		setSuppressNextClick();
 	}
 
 	function handleMove(index: number, deltaX: number, deltaY: number, finished: boolean) {
@@ -245,14 +274,17 @@
 	function handleDragEnd() {
 		isAnyCardDragging = false;
 		// Note: moveStartState is cleared in handleMove when finished=true
+		// Suppress the next click to prevent accidental note creation
+		setSuppressNextClick();
 	}
 
 	function handleLayerChange(index: number, newLayer: number, newX: number, newWidth: number, finished: boolean) {
 		// Update the layer optimistically
 		if (index >= 0 && index < items.length && finished) {
 			const newY = -newLayer * 50; // GRID_SPACING = 50
+			const item = items[index]!;
 			items[index] = {
-				...items[index],
+				...item,
 				x: newX,
 				width: newWidth,
 				layer: newLayer,

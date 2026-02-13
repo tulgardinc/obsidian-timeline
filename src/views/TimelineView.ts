@@ -513,6 +513,7 @@ export class TimelineView extends ItemView {
 
 	/**
 	 * Multi-select move: Move all selected items by the same delta
+	 * Handles layer changes and updates the cache
 	 */
 	private async updateItemsMove(activeIndex: number, deltaX: number, deltaY: number): Promise<void> {
 		// Get all selected items including the active one
@@ -528,9 +529,28 @@ export class TimelineView extends ItemView {
 			const newX = item.x + deltaX;
 			const newY = item.y + deltaY;
 			
+			// Calculate dates from new X position
 			const newDateStart = this.pixelsToDate(newX);
 			const endPixels = newX + item.width;
 			const newDateEnd = this.pixelsToDate(endPixels);
+			
+			// Parse dates for collision detection
+			const dateStart = this.parseDate(newDateStart);
+			const dateEnd = this.parseDate(newDateEnd);
+			
+			if (!dateStart || !dateEnd) {
+				console.error(`Timeline: Invalid dates for ${item.file.basename}`);
+				continue;
+			}
+			
+			// Calculate target layer from new Y position
+			const targetLayer = LayerManager.yToLayer(newY);
+			
+			// Find available layer (checking collision with other items)
+			const finalLayer = this.findAvailableLayerForMove(index, targetLayer, dateStart, dateEnd);
+			
+			// Recalculate Y to be snapped to the final layer
+			const finalY = LayerManager.layerToY(finalLayer);
 			
 			const previousState: TimelineState = {
 				dateStart: item.dateStart,
@@ -547,18 +567,27 @@ export class TimelineView extends ItemView {
 				
 				await this.app.vault.modify(item.file, newContent);
 				
+				// Update layer in cache
+				if (this.cacheService && finalLayer !== item.layer) {
+					const noteId = this.cacheService.getNoteId(item.file);
+					if (noteId) {
+						this.cacheService.setNoteLayer(this.timelineId, noteId, finalLayer, item.file.path);
+					}
+				}
+				
 				this.timelineItems[index] = {
 					...item,
 					dateStart: newDateStart,
 					dateEnd: newDateEnd,
 					x: newX,
-					y: newY
+					y: finalY,
+					layer: finalLayer
 				};
 				
 				const newState: TimelineState = {
 					dateStart: newDateStart,
 					dateEnd: newDateEnd,
-					layer: item.layer ?? 0
+					layer: finalLayer
 				};
 				this.historyManager.record(item.file, previousState, newState, 'move');
 				
@@ -582,6 +611,58 @@ export class TimelineView extends ItemView {
 			this.updateSelectedCardData(this.activeIndex);
 			this.updateSelectionInComponent();
 		}
+	}
+	
+	/**
+	 * Find available layer for a move operation
+	 * Similar to findAvailableLayer but excludes the item being moved
+	 */
+	private findAvailableLayerForMove(itemIndex: number, targetLayer: number, dateStart: TimelineDate, dateEnd: TimelineDate): number {
+		// Try target layer first
+		if (!this.isLayerBusyExcluding(itemIndex, targetLayer, dateStart, dateEnd)) {
+			return targetLayer;
+		}
+		
+		// Alternating search
+		const maxSearch = Math.max(this.timelineItems.length * 2, 100);
+		for (let i = 1; i < maxSearch; i++) {
+			// Try layer above
+			const layerAbove = targetLayer + i;
+			if (!this.isLayerBusyExcluding(itemIndex, layerAbove, dateStart, dateEnd)) {
+				return layerAbove;
+			}
+			// Try layer below
+			const layerBelow = targetLayer - i;
+			if (!this.isLayerBusyExcluding(itemIndex, layerBelow, dateStart, dateEnd)) {
+				return layerBelow;
+			}
+		}
+		
+		// Fallback to target layer
+		console.warn(`Timeline: No available layer found, using target layer ${targetLayer} with overlap`);
+		return targetLayer;
+	}
+	
+	/**
+	 * Check if a layer is busy, excluding a specific item index
+	 */
+	private isLayerBusyExcluding(excludeIndex: number, layer: number, dateStart: TimelineDate, dateEnd: TimelineDate): boolean {
+		for (let i = 0; i < this.timelineItems.length; i++) {
+			if (i === excludeIndex) continue;
+			
+			const item = this.timelineItems[i];
+			if (!item || item.layer !== layer) continue;
+			
+			const itemStart = this.parseDate(item.dateStart);
+			const itemEnd = this.parseDate(item.dateEnd);
+			
+			if (!itemStart || !itemEnd) continue;
+			
+			if (LayerManager.rangesOverlap(dateStart, dateEnd, itemStart, itemEnd)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -776,6 +857,164 @@ export class TimelineView extends ItemView {
 		this.activeIndex = null;
 		this.selectedCardData = null;
 		this.updateSelectionInComponent();
+	}
+
+	/**
+	 * Create a new note from a canvas click
+	 * The card will have 3 time units duration at current zoom level, default color, and be placed on the clicked layer
+	 */
+	private async createNoteFromClick(event: { worldX: number; worldY: number }): Promise<void> {
+		if (!this.cacheService) {
+			new Notice('Timeline cache service not available');
+			return;
+		}
+
+		try {
+			// 1. Calculate start time: snap to closest marker
+			const scaleLevel = TimeScaleManager.getScaleLevel(this.timeScale);
+			const dayAtClick = TimeScaleManager.worldXToDay(event.worldX, this.timeScale);
+			const snappedStartDay = TimeScaleManager.snapToNearestMarker(Math.round(dayAtClick), scaleLevel);
+
+			// 2. Calculate duration: 3 time units at current scale level
+			const daysPerUnit = this.getDaysPerUnitAtLevel(scaleLevel);
+			const durationDays = daysPerUnit * 3;
+			const endDay = snappedStartDay + durationDays;
+
+			// 3. Create dates
+			const startDate = TimelineDate.fromDaysFromEpoch(snappedStartDay);
+			const endDate = TimelineDate.fromDaysFromEpoch(endDay);
+			const startDateStr = startDate.toISOString();
+			const endDateStr = endDate.toISOString();
+
+			// 4. Calculate layer from Y position
+			const targetLayer = LayerManager.yToLayer(event.worldY);
+
+			// 5. Find available layer (use collision detection)
+			const finalLayer = this.findAvailableLayer(targetLayer, startDate, endDate);
+
+			// 6. Create unique filename
+			const rootPath = this.rootPath === '' ? '/' : this.rootPath;
+			let baseName = `Timeline note ${startDate.getYMD().year}-${String(startDate.getYMD().month).padStart(2, '0')}-${String(startDate.getYMD().day).padStart(2, '0')}`;
+			let fileName = `${baseName}.md`;
+			let filePath = `${rootPath === '/' ? '' : rootPath}/${fileName}`;
+
+			// Ensure unique filename
+			let counter = 1;
+			while (this.app.vault.getAbstractFileByPath(filePath)) {
+				fileName = `${baseName} ${counter}.md`;
+				filePath = `${rootPath === '/' ? '' : rootPath}/${fileName}`;
+				counter++;
+			}
+
+			// 7. Create file with frontmatter
+			const content = `---
+timeline: true
+date-start: ${startDateStr}
+date-end: ${endDateStr}
+---
+
+# Timeline Note
+
+Created from timeline view.
+`;
+			const newFile = await this.app.vault.create(filePath, content);
+
+			// 8. Generate note ID and set layer in cache
+			const noteId = await this.cacheService.getOrCreateNoteId(newFile);
+			this.cacheService.setNoteLayer(this.timelineId, noteId, finalLayer, newFile.path);
+
+			// 9. Create TimelineItem
+			const startX = TimeScaleManager.dayToWorldX(snappedStartDay, this.timeScale);
+			const width = Math.max(durationDays, 1) * this.timeScale;
+			const y = LayerManager.layerToY(finalLayer);
+
+			const newItem: TimelineItem = {
+				file: newFile,
+				title: newFile.basename,
+				x: startX,
+				y: y,
+				width: width,
+				dateStart: startDateStr,
+				dateEnd: endDateStr,
+				layer: finalLayer
+			};
+
+			// 10. Add to items list and refresh
+			this.timelineItems.push(newItem);
+			if (this.component && this.component.refreshItems) {
+				this.component.refreshItems(this.timelineItems);
+			}
+
+			// 11. Select the new card and open the note
+			const newIndex = this.timelineItems.length - 1;
+			this.selectCard(newIndex);
+			await this.openFile(newIndex);
+
+			new Notice(`Created note: ${newFile.basename}`);
+		} catch (error) {
+			console.error('Timeline: Failed to create note from click:', error);
+			new Notice(`Failed to create note: ${error}`);
+		}
+	}
+
+	/**
+	 * Get the number of days per unit at a given scale level
+	 */
+	private getDaysPerUnitAtLevel(level: number): number {
+		switch (level) {
+			case 0: return 1; // Days
+			case 1: return 30; // Months (avg)
+			case 2: return 365; // Years
+			case 3: return 3650; // Decades
+			case 4: return 36500; // Centuries
+			default: return 365 * Math.pow(10, level - 2); // Millennia and larger
+		}
+	}
+
+	/**
+	 * Find an available layer for a new note at the given time range
+	 * Uses alternating search: +1, -1, +2, -2, etc.
+	 */
+	private findAvailableLayer(targetLayer: number, dateStart: TimelineDate, dateEnd: TimelineDate): number {
+		// Try target layer first
+		if (!this.isLayerBusy(targetLayer, dateStart, dateEnd)) {
+			return targetLayer;
+		}
+
+		// Alternating search
+		const maxSearch = Math.max(this.timelineItems.length * 2, 100);
+		for (let i = 1; i < maxSearch; i++) {
+			// Try layer above (+i)
+			if (!this.isLayerBusy(targetLayer + i, dateStart, dateEnd)) {
+				return targetLayer + i;
+			}
+			// Try layer below (-i)
+			if (!this.isLayerBusy(targetLayer - i, dateStart, dateEnd)) {
+				return targetLayer - i;
+			}
+		}
+
+		// Fallback to target layer (will overlap)
+		return targetLayer;
+	}
+
+	/**
+	 * Check if a layer is busy at the given time range
+	 */
+	private isLayerBusy(layer: number, dateStart: TimelineDate, dateEnd: TimelineDate): boolean {
+		for (const item of this.timelineItems) {
+			if (item.layer !== layer) continue;
+			
+			const itemStart = this.parseDate(item.dateStart);
+			const itemEnd = this.parseDate(item.dateEnd);
+			
+			if (!itemStart || !itemEnd) continue;
+			
+			if (LayerManager.rangesOverlap(dateStart, dateEnd, itemStart, itemEnd)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private updateSelectedCardData(index: number): void {
@@ -1326,8 +1565,14 @@ export class TimelineView extends ItemView {
 						}
 						this.scheduleViewportSave();
 					},
-					onCanvasClick: () => {
-						this.clearSelection();
+					onCanvasClick: (event: { screenX: number; screenY: number; worldX: number; worldY: number }) => {
+						// Only create a note if no cards are currently selected
+						// First click clears selection, second click creates note
+						if (this.selectedIndices.size > 0) {
+							this.clearSelection();
+							return;
+						}
+						void this.createNoteFromClick(event);
 					},
 					onItemContextMenu: (index: number, event: MouseEvent) => {
 						this.showCardContextMenu(index, event);

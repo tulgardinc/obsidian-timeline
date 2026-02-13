@@ -155,7 +155,7 @@
 		onViewportChange?: (width: number, height: number) => void;
 		onTimeScaleChange?: (timeScale: number) => void;
 		selectedCard?: CardHoverData | null;
-		onCanvasClick?: () => void;
+		onCanvasClick?: (event: { screenX: number; screenY: number; worldX: number; worldY: number }) => void;
 		isAnyCardDragging?: boolean;
 		isAnyCardResizing?: boolean;
 		activeResizeEdge?: 'left' | 'right' | null;
@@ -737,10 +737,33 @@
 		onmouseup={handleMouseUp}
 		onmouseleave={handleMouseLeave}
 		onmouseenter={handleMouseEnter}
-		onclick={() => {
+		onclick={(event) => {
 			// Only treat as click if we didn't pan significantly
 			if (totalPanDelta < PAN_THRESHOLD && onCanvasClick) {
-				onCanvasClick();
+				// Guard: ignore clicks on header region (top 40px)
+				const rect = viewportRef?.getBoundingClientRect();
+				if (!rect) return;
+				
+				const screenX = event.clientX - rect.left;
+				const screenY = event.clientY - rect.top;
+				
+				// Ignore clicks in the header area
+				if (screenY < 40) return;
+				
+				// Ignore clicks on controls
+				if ((event.target as HTMLElement | null)?.closest('.controls')) return;
+				
+				// Guard: ignore clicks on timeline cards (defensive - events should be stopped by cards)
+				if ((event.target as HTMLElement | null)?.closest('.timeline-card')) return;
+				
+				// Guard: ignore clicks while any card is being dragged or resized
+				if (isAnyCardDragging || isAnyCardResizing) return;
+				
+				// Calculate world coordinates
+				const worldX = TimeScaleManager.screenToWorldX(screenX, translateX);
+				const worldY = (screenY - translateY) / scale;
+				
+				onCanvasClick({ screenX, screenY, worldX, worldY });
 			}
 		}}
 >
@@ -801,7 +824,6 @@
 	<div class="controls">
 		<div class="zoom-level">Y:{Math.round(scale * 100)}% | Time:{Math.round(timeScale * 10) / 10}</div>
 		<button onclick={resetZoom}>Reset Y Zoom</button>
-		<button onclick={centerView}>Center</button>
 	</div>
 </div>
 

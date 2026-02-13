@@ -71,6 +71,14 @@ export class LayerManager {
 	}
 
 	/**
+	 * Calculate layer number from Y position
+	 * Inverse of layerToY
+	 */
+	static yToLayer(y: number): number {
+		return -Math.round(y / GRID_SPACING);
+	}
+
+	/**
 	 * Assign layers to items using alternating search pattern:
 	 * +1, -1, +2, -2, +3, -3, ...
 	 * 
