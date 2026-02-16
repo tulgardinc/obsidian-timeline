@@ -52,7 +52,11 @@ export async function resizeItem(
 
 	items[index] = { ...item, x: newX, width: newWidth, dateStart: newDateStart, dateEnd: newDateEnd };
 
-	await FileService.updateFileDatesStatic(app, item.file, newDateStart, newDateEnd);
+	try {
+		await FileService.updateFileDatesStatic(app, item.file, newDateStart, newDateEnd);
+	} catch (error) {
+		console.error(`Timeline: Failed to update dates for ${item.file.basename}:`, error);
+	}
 }
 
 // ── Move ────────────────────────────────────────────────────
@@ -80,7 +84,11 @@ export async function moveItem(
 	items[index] = { ...item, x: newX, y: snappedY, dateStart: newDateStart, dateEnd: newDateEnd, layer: newLayer };
 
 	if (item.type === 'note') {
-		await FileService.updateFileDatesStatic(app, item.file, newDateStart, newDateEnd);
+		try {
+			await FileService.updateFileDatesStatic(app, item.file, newDateStart, newDateEnd);
+		} catch (error) {
+			console.error(`Timeline: Failed to update dates for ${item.file.basename}:`, error);
+		}
 		if (cacheService) {
 			const noteId = cacheService.getNoteId(item.file);
 			if (noteId) {
@@ -117,7 +125,11 @@ export async function changeItemLayer(
 		if (noteId) {
 			cacheService.setNoteLayer(timelineId, noteId, newLayer, item.file.path);
 		}
-		await FileService.updateFileDatesStatic(app, item.file, newDateStart, newDateEnd);
+		try {
+			await FileService.updateFileDatesStatic(app, item.file, newDateStart, newDateEnd);
+		} catch (error) {
+			console.error(`Timeline: Failed to update dates for ${item.file.basename}:`, error);
+		}
 	} else if (item.type === 'timeline' && cacheService) {
 		cacheService.setTimelineCardLayer(timelineId, item.timelineId, newLayer);
 	}
@@ -147,7 +159,8 @@ export async function applyColorToItems(
 				});
 				item.color = color ?? undefined;
 				successCount++;
-			} catch {
+			} catch (error) {
+				console.error(`Timeline: Failed to apply color to ${item.file.basename}:`, error);
 				failCount++;
 			}
 		} else if (item.type === 'timeline' && cacheService) {

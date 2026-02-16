@@ -76,7 +76,7 @@ export class TimelineView extends ItemView {
 	private historyManager: TimelineHistoryManager;
 	private selection: SelectionManager;
 	private expectedFileStates = new Map<string, ExpectedFileState>();
-	private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
+	private keydownHandlerRegistered = false;
 
 	// Time scale
 	private timeScale: number = 10;
@@ -203,7 +203,7 @@ export class TimelineView extends ItemView {
 	// ── Selection (delegates to SelectionManager) ───────────
 
 	private selectCard(index: number): void {
-		if (this.leaf !== this.app.workspace.activeLeaf) {
+		if (this.app.workspace.getActiveViewOfType(TimelineView) !== this) {
 			this.app.workspace.setActiveLeaf(this.leaf);
 		}
 		this.selection.select(index, this.timelineItems, this.timeScale);
@@ -211,7 +211,7 @@ export class TimelineView extends ItemView {
 	}
 
 	private toggleSelection(index: number): void {
-		if (this.leaf !== this.app.workspace.activeLeaf) {
+		if (this.app.workspace.getActiveViewOfType(TimelineView) !== this) {
 			this.app.workspace.setActiveLeaf(this.leaf);
 		}
 		this.selection.toggle(index, this.timelineItems, this.timeScale);
@@ -691,8 +691,8 @@ export class TimelineView extends ItemView {
 				|| active?.tagName === 'INPUT';
 			if (isEditorFocused) return;
 
-			const activeLeaf = this.app.workspace.activeLeaf;
-			if (!activeLeaf || activeLeaf.view !== this) return;
+			const activeView = this.app.workspace.getActiveViewOfType(TimelineView);
+			if (activeView !== this) return;
 			if (!this.contentEl.isConnected) return;
 
 			const isDelete = event.key === 'Delete'
@@ -715,8 +715,10 @@ export class TimelineView extends ItemView {
 			else void this.redo();
 		};
 
-		window.addEventListener('keydown', keydownHandler, true);
-		this.keydownHandler = keydownHandler;
+		if (!this.keydownHandlerRegistered) {
+			this.registerDomEvent(window, 'keydown', keydownHandler, true);
+			this.keydownHandlerRegistered = true;
+		}
 	}
 
 	async onClose() {
@@ -725,7 +727,6 @@ export class TimelineView extends ItemView {
 		if (this.metadataChangeTimeout) { clearTimeout(this.metadataChangeTimeout); this.metadataChangeTimeout = null; }
 		if (this.viewportSaveTimeout) { clearTimeout(this.viewportSaveTimeout); this.viewportSaveTimeout = null; }
 		if (this.timelineCardRefreshTimeout) { clearTimeout(this.timelineCardRefreshTimeout); this.timelineCardRefreshTimeout = null; }
-		if (this.keydownHandler) { window.removeEventListener('keydown', this.keydownHandler, true); this.keydownHandler = null; }
 		if (this.component) { unmount(this.component); this.component = null; }
 	}
 }

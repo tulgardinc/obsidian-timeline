@@ -130,11 +130,10 @@ export class FileService {
 	 * Update file dates (static - usable without a FileService instance)
 	 */
 	static async updateFileDatesStatic(app: App, file: TFile, dateStart: string, dateEnd: string): Promise<void> {
-		const content = await app.vault.read(file);
-		const newContent = content
-			.replace(/date-start:\s*\S+/, `date-start: ${dateStart}`)
-			.replace(/date-end:\s*\S+/, `date-end: ${dateEnd}`);
-		await app.vault.modify(file, newContent);
+		await app.fileManager.processFrontMatter(file, (fm) => {
+			fm['date-start'] = dateStart;
+			fm['date-end'] = dateEnd;
+		});
 	}
 
 	/**

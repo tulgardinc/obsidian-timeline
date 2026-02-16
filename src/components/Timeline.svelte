@@ -4,6 +4,7 @@
 	import InfiniteCanvas from "./InfiniteCanvas.svelte";
 	import TimelineCard from "./TimelineCard.svelte";
 	import { LayerManager } from "../utils/LayerManager";
+	import { onMount } from "svelte";
 
 	interface Props {
 		items: TimelineItem[];
@@ -135,6 +136,13 @@
 		}
 	}
 	
+	// Clean up suppress timeout on component destroy
+	onMount(() => {
+		return () => {
+			if (suppressTimeout) clearTimeout(suppressTimeout);
+		};
+	});
+
 	function setSuppressNextClick() {
 		suppressNextCanvasClick = true;
 		// Clear any existing timeout

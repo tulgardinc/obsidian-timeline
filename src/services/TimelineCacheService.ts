@@ -228,24 +228,11 @@ export class TimelineCacheService {
 		// Generate new ID
 		const newId = crypto.randomUUID();
 		
-		// Inject into file frontmatter
+		// Inject into file frontmatter using the safe processFrontMatter API
 		try {
-			const content = await this.app.vault.read(file);
-			const idRegex = /^timeline-id:\s*\S+/m;
-			
-			let newContent: string;
-			if (idRegex.test(content)) {
-				// Update existing (shouldn't happen but handle it)
-				newContent = content.replace(idRegex, `timeline-id: ${newId}`);
-			} else {
-				// Add after timeline: true
-				newContent = content.replace(
-					/(timeline:\s*true.*\n)/,
-					`$1timeline-id: ${newId}\n`
-				);
-			}
-			
-			await this.app.vault.modify(file, newContent);
+			await this.app.fileManager.processFrontMatter(file, (fm) => {
+				fm['timeline-id'] = newId;
+			});
 		} catch (error) {
 			console.error(`Timeline: Failed to inject ID into ${file.basename}:`, error);
 		}

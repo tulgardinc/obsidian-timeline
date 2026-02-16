@@ -689,6 +689,8 @@
 		
 		return () => {
 			resizeObserver?.disconnect();
+			if (zoomDebounceTimer) clearTimeout(zoomDebounceTimer);
+			if (viewportChangeTimer) clearTimeout(viewportChangeTimer);
 		};
 	});
 </script>

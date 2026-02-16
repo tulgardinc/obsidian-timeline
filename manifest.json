@@ -2,10 +2,9 @@
 	"id": "timeline",
 	"name": "Timeline",
 	"version": "1.0.0",
-	"minAppVersion": "0.15.0",
-	"description": "Display timeline cards on an infinite canvas with pan/zoom capabilities.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
-	"isDesktopOnly": false
+	"minAppVersion": "1.7.2",
+	"description": "Display notes as cards on an infinite timeline canvas",
+	"author": "tulgardinc",
+	"authorUrl": "https://github.com/tulgardinc",
+	"isDesktopOnly": true
 }

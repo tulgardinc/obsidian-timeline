@@ -102,6 +102,8 @@ export default class TimelinePlugin extends Plugin {
 						view.timelineItems,
 						(item) => view.goToItem(item)
 					).open();
+				}).catch((error) => {
+					console.error('Timeline: Failed to load suggest modal:', error);
 				});
 			}
 		});
