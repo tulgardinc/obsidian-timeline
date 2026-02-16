@@ -1,14 +1,7 @@
 <script lang="ts">
 	import { TimeScaleManager, type ScaleLevel } from "../utils/TimeScaleManager";
 	import type { Readable } from "svelte/store";
-
-	interface CardHoverData {
-		startX: number;
-		endX: number;
-		startDate: string;
-		endDate: string;
-		title: string;
-	}
+	import type { CardHoverData } from "../types/timelineTypes";
 
 	interface Props {
 		timeScale: number;

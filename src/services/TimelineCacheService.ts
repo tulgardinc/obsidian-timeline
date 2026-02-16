@@ -374,84 +374,34 @@ export class TimelineCacheService {
 	}
 
 	/**
-	 * Assign layers to items for a timeline using cached layers when available
-	 * This replaces LayerManager.assignLayers with cache-aware version
+	 * Assign layers to items for a timeline using cached layers when available.
+	 * Delegates the actual assignment algorithm to LayerManager.assignLayers().
 	 */
 	assignLayersWithCache(
 		timelineId: string,
 		items: LayerableItem[],
 		getNoteId: (file: TFile) => string | undefined
 	): LayerAssignment[] {
-		// First, set layers from cache where available
+		// Populate cachedLayer from the cache so LayerManager can use it as preferred
 		for (const item of items) {
 			const noteId = getNoteId(item.file);
 			if (noteId) {
 				const cachedLayer = this.getNoteLayer(timelineId, noteId);
 				if (cachedLayer !== undefined) {
-					// Mark this as a preferred layer for the item
-					(item as LayerableItem & { cachedLayer?: number }).cachedLayer = cachedLayer;
+					item.cachedLayer = cachedLayer;
 				}
 			}
 		}
 
-		// Now use LayerManager to assign, respecting cached layers
-		const assignments: LayerAssignment[] = [];
-		const processedItems: LayerableItem[] = [];
+		// Delegate to LayerManager (single source of truth for the algorithm)
+		const assignments = LayerManager.assignLayers(items);
 
+		// Update cache with the assigned layers
 		for (const item of items) {
-			// Try cached layer first, then default to 0
-			const cachedLayer = (item as LayerableItem & { cachedLayer?: number }).cachedLayer;
-			const preferredLayer = cachedLayer ?? 0;
-			const previousLayer = item.layer;
-
-			// Check if preferred layer is available
-			if (!LayerManager.isLayerBusy(preferredLayer, item.dateStart, item.dateEnd, processedItems)) {
-				item.layer = preferredLayer;
-			} else {
-				// Use alternating search from LayerManager
-				let assigned = false;
-				const maxSearch = Math.max(items.length * 2, 100);
-
-				for (let i = 1; i < maxSearch && !assigned; i++) {
-					// Try +i (above)
-					const layerAbove = preferredLayer + i;
-					if (!LayerManager.isLayerBusy(layerAbove, item.dateStart, item.dateEnd, processedItems, item.file)) {
-						item.layer = layerAbove;
-						assigned = true;
-						break;
-					}
-
-					// Try -i (below)
-					const layerBelow = preferredLayer - i;
-					if (!LayerManager.isLayerBusy(layerBelow, item.dateStart, item.dateEnd, processedItems, item.file)) {
-						item.layer = layerBelow;
-						assigned = true;
-						break;
-					}
-				}
-
-				// Fallback: use preferred and let it overlap
-				if (!assigned) {
-					item.layer = preferredLayer;
-				}
-			}
-
-			// Record the assignment if layer changed or is new
-			if (item.layer !== previousLayer || item.layer !== cachedLayer) {
-				assignments.push({
-					file: item.file,
-					layer: item.layer!,
-					previousLayer: previousLayer !== item.layer ? previousLayer : undefined
-				});
-			}
-
-			// Update cache with the assigned layer
 			const noteId = getNoteId(item.file);
-			if (noteId) {
-				this.setNoteLayer(timelineId, noteId, item.layer!, item.file.path);
+			if (noteId && item.layer !== undefined) {
+				this.setNoteLayer(timelineId, noteId, item.layer, item.file.path);
 			}
-
-			processedItems.push(item);
 		}
 
 		return assignments;

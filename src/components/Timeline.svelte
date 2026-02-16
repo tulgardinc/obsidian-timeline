@@ -1,16 +1,9 @@
 <script lang="ts">
 	import type { TFile } from "obsidian";
-	import type { TimelineItem } from "../stores/timelineStore";
+	import type { TimelineItem, CardHoverData } from "../types/timelineTypes";
 	import InfiniteCanvas from "./InfiniteCanvas.svelte";
 	import TimelineCard from "./TimelineCard.svelte";
-
-	interface CardHoverData {
-		startX: number;
-		endX: number;
-		startDate: string;
-		endDate: string;
-		title: string;
-	}
+	import { LayerManager } from "../utils/LayerManager";
 
 	interface Props {
 		items: TimelineItem[];
@@ -281,7 +274,7 @@
 	function handleLayerChange(index: number, newLayer: number, newX: number, newWidth: number, finished: boolean) {
 		// Update the layer optimistically
 		if (index >= 0 && index < items.length && finished) {
-			const newY = -newLayer * 50; // GRID_SPACING = 50
+			const newY = LayerManager.layerToY(newLayer);
 			const item = items[index]!;
 			items[index] = {
 				...item,

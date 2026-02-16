@@ -10,7 +10,7 @@
  */
 
 import { type App, Notice } from "obsidian";
-import type { TimelineItem } from "../stores/timelineStore";
+import type { TimelineItem } from "../types/timelineTypes";
 import type { TimelineCacheService } from "./TimelineCacheService";
 import type { TimelinePluginContext } from "../types/plugin-context";
 import { FileService } from "./FileService";
@@ -192,29 +192,10 @@ export async function addTimelineCard(
 		return false;
 	}
 
-	// Find available layer (same alternating search)
+	// Find available layer using centralized alternating search
 	const startDate = TimelineDate.fromDaysFromEpoch(span.startDay);
 	const endDate = TimelineDate.fromDaysFromEpoch(span.endDay);
-	let finalLayer = 0;
-
-	const busy = (layer: number) => {
-		for (const item of items) {
-			if (item.layer !== layer) continue;
-			const s = TimelineDate.fromString(item.dateStart);
-			const e = TimelineDate.fromString(item.dateEnd);
-			if (!s || !e) continue;
-			if (LayerManager.rangesOverlap(startDate, endDate, s, e)) return true;
-		}
-		return false;
-	};
-
-	if (busy(0)) {
-		const maxSearch = Math.max(items.length * 2, 100);
-		for (let i = 1; i < maxSearch; i++) {
-			if (!busy(i)) { finalLayer = i; break; }
-			if (!busy(-i)) { finalLayer = -i; break; }
-		}
-	}
+	const finalLayer = LayerManager.findAvailableLayerForItems(0, startDate, endDate, items);
 
 	cacheService.addTimelineCard(timelineId, refTimelineId, finalLayer);
 	new Notice(`Added timeline "${config.name}" to view`);

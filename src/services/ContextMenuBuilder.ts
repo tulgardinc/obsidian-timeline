@@ -4,7 +4,7 @@
  */
 
 import { Menu } from "obsidian";
-import type { TimelineItem } from "../stores/timelineStore";
+import type { TimelineItem } from "../types/timelineTypes";
 import type { TimelineColor } from "../utils/LayerManager";
 
 export interface ContextMenuCallbacks {

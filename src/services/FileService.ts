@@ -3,7 +3,7 @@ import { LayerManager, type LayerableItem } from '../utils/LayerManager';
 import { debug } from '../utils/debug';
 import { TimeScaleManager } from '../utils/TimeScaleManager';
 import { TimelineDate } from '../utils/TimelineDate';
-import type { TimelineItem } from '../stores/timelineStore';
+import type { TimelineItem } from '../types/timelineTypes';
 import type { TimelineCacheService } from './TimelineCacheService';
 
 export interface FileServiceDependencies {

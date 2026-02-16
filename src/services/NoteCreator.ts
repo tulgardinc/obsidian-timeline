@@ -6,63 +6,11 @@
  */
 
 import { type App, Notice } from "obsidian";
-import type { TimelineItem } from "../stores/timelineStore";
+import type { TimelineItem } from "../types/timelineTypes";
 import type { TimelineCacheService } from "./TimelineCacheService";
 import { LayerManager } from "../utils/LayerManager";
 import { TimeScaleManager } from "../utils/TimeScaleManager";
 import { TimelineDate } from "../utils/TimelineDate";
-
-/**
- * Get the number of days per unit at a given scale level.
- */
-function getDaysPerUnitAtLevel(level: number): number {
-	switch (level) {
-		case 0: return 1;
-		case 1: return 30;
-		case 2: return 365;
-		case 3: return 3650;
-		case 4: return 36500;
-		default: return 365 * Math.pow(10, level - 2);
-	}
-}
-
-/**
- * Check whether a layer is occupied at a given time range.
- */
-function isLayerBusy(
-	layer: number,
-	dateStart: TimelineDate,
-	dateEnd: TimelineDate,
-	items: TimelineItem[],
-): boolean {
-	for (const item of items) {
-		if (item.layer !== layer) continue;
-		const s = TimelineDate.fromString(item.dateStart);
-		const e = TimelineDate.fromString(item.dateEnd);
-		if (!s || !e) continue;
-		if (LayerManager.rangesOverlap(dateStart, dateEnd, s, e)) return true;
-	}
-	return false;
-}
-
-/**
- * Find an available layer using alternating search (+1, -1, +2, …).
- */
-function findAvailableLayer(
-	target: number,
-	dateStart: TimelineDate,
-	dateEnd: TimelineDate,
-	items: TimelineItem[],
-): number {
-	if (!isLayerBusy(target, dateStart, dateEnd, items)) return target;
-
-	const maxSearch = Math.max(items.length * 2, 100);
-	for (let i = 1; i < maxSearch; i++) {
-		if (!isLayerBusy(target + i, dateStart, dateEnd, items)) return target + i;
-		if (!isLayerBusy(target - i, dateStart, dateEnd, items)) return target - i;
-	}
-	return target;
-}
 
 /**
  * Create a new timeline note at the given world position.
@@ -84,7 +32,7 @@ export async function createNoteFromClick(
 		const dayAtClick = TimeScaleManager.worldXToDay(event.worldX, timeScale);
 		const snappedStartDay = TimeScaleManager.snapToNearestMarker(Math.round(dayAtClick), scaleLevel);
 
-		const daysPerUnit = getDaysPerUnitAtLevel(scaleLevel);
+		const daysPerUnit = TimeScaleManager.getDaysPerUnitAtLevel(scaleLevel);
 		const durationDays = daysPerUnit * 3;
 		const endDay = snappedStartDay + durationDays;
 
@@ -94,7 +42,7 @@ export async function createNoteFromClick(
 		const endDateStr = endDate.toISOString();
 
 		const targetLayer = LayerManager.yToLayer(event.worldY);
-		const finalLayer = findAvailableLayer(targetLayer, startDate, endDate, items);
+		const finalLayer = LayerManager.findAvailableLayerForItems(targetLayer, startDate, endDate, items);
 
 		const root = rootPath === '' ? '/' : rootPath;
 		const prefix = root === '/' ? '' : rootPath;

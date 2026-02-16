@@ -20,15 +20,12 @@ src/
     ContextMenuBuilder.ts         # Right-click context menu (Obsidian Menu API)
     FileService.ts                # Collect note cards from vault files
     TimelineCacheService.ts       # Disk-backed cache (viewport, layers, IDs)
-  stores/
-    timelineStore.ts              # Shared type definitions (TimelineItem, etc.)
   components/                     # Svelte 5 UI components
     Timeline.svelte               # Root wrapper, prop forwarding
     InfiniteCanvas.svelte         # Pan/zoom viewport, marker rendering
     TimelineCard.svelte           # Individual card rendering & interaction
     TimelineHeader.svelte         # Date header bar
     GridLines.svelte              # Horizontal grid lines
-    MarkdownInfoView.svelte       # Markdown preview popover
   contexts/
     ViewportContext.ts            # Svelte context for viewport state getters
   modals/
@@ -42,9 +39,10 @@ src/
     TimelineDate.ts               # Arbitrary-range date (Julian Day Number)
     TimelineHistoryManager.ts     # Undo/redo stack
     TimeScaleManager.ts           # X-axis time ↔ pixel conversions & markers
-    ViewportClamping.ts           # Card edge clamping at viewport boundaries
+    ViewportStateManager.ts       # Viewport clamping and zoom-toward-point math
     debug.ts                      # Guarded console.log (silent in production)
   types/
+    timelineTypes.ts              # Shared types (TimelineItem, CardHoverData, etc.)
     obsidian-ex.d.ts              # Type augmentations for undocumented APIs
     plugin-context.ts             # TimelinePluginContext interface (DI)
 ```
@@ -104,8 +102,8 @@ Y-axis:  screenY = worldY * scale + translateY
 - `scale` only affects vertical zoom (Y axis).
 - `translateX` / `translateY` are camera pan offsets.
 
-All modules (`TimeScaleManager`, `CameraSystem`, `CardCameraRenderer`,
-`ViewportClamping`) follow this convention.
+All modules (`TimeScaleManager`, `CameraSystem`, `CardCameraRenderer`)
+follow this convention.
 
 ## Type hierarchy
 

@@ -6,21 +6,13 @@
  * for the selected card overlay.
  */
 
-import type { TimelineItem, NoteTimelineItem, TimelineRefItem } from "../stores/timelineStore";
+import type { TimelineItem, NoteTimelineItem, CardHoverData } from "../types/timelineTypes";
 import { TimeScaleManager } from "../utils/TimeScaleManager";
-
-export interface SelectedCardData {
-	startX: number;
-	endX: number;
-	startDate: string;
-	endDate: string;
-	title: string;
-}
 
 export class SelectionManager {
 	selectedIndices: Set<number> = new Set();
 	activeIndex: number | null = null;
-	selectedCardData: SelectedCardData | null = null;
+	selectedCardData: CardHoverData | null = null;
 
 	/**
 	 * Select only the given card, clearing all others.

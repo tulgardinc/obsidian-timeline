@@ -1,5 +1,6 @@
 import type { TFile } from "obsidian";
 import { TimelineDate } from "./TimelineDate";
+import type { TimelineItem } from "../types/timelineTypes";
 
 export type TimelineColor = 'red' | 'blue' | 'green' | 'yellow';
 
@@ -19,7 +20,7 @@ export interface LayerAssignment {
 	previousLayer?: number;
 }
 
-const GRID_SPACING = 50;
+export const GRID_SPACING = 50;
 
 export class LayerManager {
 	/**
@@ -139,6 +140,49 @@ export class LayerManager {
 		}
 
 		return assignments;
+	}
+
+	/**
+	 * Check if a layer is busy within a list of TimelineItems.
+	 * Converts date strings to TimelineDate on the fly.
+	 * Use this when working with the runtime TimelineItem[] array
+	 * (e.g. NoteCreator, TimelineCardManager).
+	 */
+	static isLayerBusyForItems(
+		targetLayer: number,
+		dateStart: TimelineDate,
+		dateEnd: TimelineDate,
+		items: TimelineItem[],
+	): boolean {
+		for (const item of items) {
+			if (item.layer !== targetLayer) continue;
+			const s = TimelineDate.fromString(item.dateStart);
+			const e = TimelineDate.fromString(item.dateEnd);
+			if (!s || !e) continue;
+			if (this.rangesOverlap(dateStart, dateEnd, s, e)) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Find an available layer using the standard alternating search
+	 * (+1, -1, +2, -2, …) starting from `target`, checking against
+	 * an existing TimelineItem[] array.
+	 */
+	static findAvailableLayerForItems(
+		target: number,
+		dateStart: TimelineDate,
+		dateEnd: TimelineDate,
+		items: TimelineItem[],
+	): number {
+		if (!this.isLayerBusyForItems(target, dateStart, dateEnd, items)) return target;
+
+		const maxSearch = Math.max(items.length * 2, 100);
+		for (let i = 1; i < maxSearch; i++) {
+			if (!this.isLayerBusyForItems(target + i, dateStart, dateEnd, items)) return target + i;
+			if (!this.isLayerBusyForItems(target - i, dateStart, dateEnd, items)) return target - i;
+		}
+		return target;
 	}
 
 	/**

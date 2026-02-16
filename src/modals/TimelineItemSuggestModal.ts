@@ -1,5 +1,5 @@
 import { FuzzySuggestModal, App } from "obsidian";
-import type { TimelineItem } from "../stores/timelineStore";
+import type { TimelineItem } from "../types/timelineTypes";
 
 export class TimelineItemSuggestModal extends FuzzySuggestModal<TimelineItem> {
 	private items: TimelineItem[];

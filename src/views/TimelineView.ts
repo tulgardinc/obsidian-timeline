@@ -21,7 +21,7 @@ import { LayerManager, type TimelineColor } from "../utils/LayerManager";
 import { TimelineHistoryManager, type TimelineState, type HistoryEntry } from "../utils/TimelineHistoryManager";
 import { TimeScaleManager } from "../utils/TimeScaleManager";
 import { TimelineDate } from "../utils/TimelineDate";
-import type { TimelineItem } from "../stores/timelineStore";
+import type { TimelineItem } from "../types/timelineTypes";
 import { DeleteConfirmModal, type DeleteAction } from "../modals/DeleteConfirmModal";
 import type { TimelineViewConfig } from "../settings";
 import { FileService } from "../services/FileService";

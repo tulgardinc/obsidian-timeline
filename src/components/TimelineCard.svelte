@@ -5,6 +5,7 @@
 	import { TimeScaleManager } from "../utils/TimeScaleManager";
 	import { getViewportContext } from "../contexts/ViewportContext";
 	import { CardCameraRenderer, type CardWorldData } from "../utils/CardCameraRenderer";
+	import { LayerManager, GRID_SPACING } from "../utils/LayerManager";
 	import type { ViewportState } from "../utils/CameraSystem";
 
 	interface Props {
@@ -35,8 +36,6 @@
 	const isTimelineCard = $derived(type === 'timeline');
 	const isNoteCard = $derived(type === 'note');
 
-	const GRID_SPACING = 50;
-	const START_DATE = new Date('1970-01-01');
 	const EDGE_ZONE = 8; // px from edge to trigger resize handle
 
 	// Get viewport context (provided by InfiniteCanvas parent)
@@ -136,15 +135,9 @@
 
 	let cardRef: HTMLDivElement;
 
-	// Calculate layer from Y position
-	function yToLayer(yPos: number): number {
-		return -Math.round(yPos / GRID_SPACING);
-	}
-
-	// Calculate Y position from layer
-	function layerToY(layerNum: number): number {
-		return -layerNum * GRID_SPACING;
-	}
+	// Delegate to LayerManager for layer ↔ Y conversions
+	const yToLayer = LayerManager.yToLayer;
+	const layerToY = LayerManager.layerToY;
 
 	// Calculate date from X position using unified coordinate functions
 	function xToDate(xPos: number): string {

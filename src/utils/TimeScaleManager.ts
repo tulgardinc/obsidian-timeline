@@ -121,6 +121,22 @@ export class TimeScaleManager {
 	}
 
 	/**
+	 * Get the number of days per "small" unit at the given scale level.
+	 * Level 0: 1 day, Level 1: ~30 days (month), Level 2: 365 days (year),
+	 * Level 3: 3650 days (decade), etc.
+	 */
+	static getDaysPerUnitAtLevel(level: number): number {
+		switch (level) {
+			case 0: return 1;
+			case 1: return 30;
+			case 2: return 365;
+			case 3: return 3650;
+			case 4: return 36500;
+			default: return 365 * Math.pow(10, level - 2);
+		}
+	}
+
+	/**
 	 * Get the minimum resize width in pixels for the current timeScale.
 	 * The minimum is the "small" unit at the current scale level:
 	 * - Level 0 (Days): minimum = 1 day = timeScale pixels

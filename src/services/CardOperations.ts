@@ -7,7 +7,7 @@
  */
 
 import { type App, type TFile, Notice } from "obsidian";
-import type { TimelineItem, NoteTimelineItem, TimelineRefItem } from "../stores/timelineStore";
+import type { TimelineItem } from "../types/timelineTypes";
 import type { TimelineCacheService } from "./TimelineCacheService";
 import type { TimelineColor } from "../utils/LayerManager";
 import { LayerManager } from "../utils/LayerManager";

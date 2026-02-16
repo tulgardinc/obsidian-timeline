@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { GRID_SPACING } from "../utils/LayerManager";
+
 	interface Props {
 		scale: number;
 		translateX: number;
@@ -9,8 +11,6 @@
 
 	let { scale, translateX, translateY, viewportWidth, viewportHeight }: Props = $props();
 
-	const SPACING = 50; // pixels between lines in world coordinates
-
 	// Calculate visible horizontal grid lines (Y axis) with proper viewport culling
 	let visibleLines = $derived(() => {
 		const lines: Array<{ screenY: number; index: number }> = [];
@@ -20,12 +20,12 @@
 		const worldBottom = (-translateY + viewportHeight) / scale;
 		
 		// Find the first and last line indices
-		const firstLine = Math.floor(worldTop / SPACING);
-		const lastLine = Math.ceil(worldBottom / SPACING);
+		const firstLine = Math.floor(worldTop / GRID_SPACING);
+		const lastLine = Math.ceil(worldBottom / GRID_SPACING);
 		
 		for (let i = firstLine; i <= lastLine; i++) {
 			// Calculate screen position
-			const worldY = i * SPACING;
+			const worldY = i * GRID_SPACING;
 			const screenY = worldY * scale + translateY;
 			
 			// Cull lines outside viewport
