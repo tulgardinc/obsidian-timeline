@@ -238,6 +238,56 @@ export class TimelineView extends ItemView {
 		);
 	}
 
+	/**
+	 * Re-map selection indices after a full rebuild of timelineItems.
+	 * Matches previously-selected cards by file path so that selection
+	 * survives array reordering.
+	 */
+	private remapSelection(oldItems: TimelineItem[]): void {
+		if (this.selection.selectedIndices.size === 0) return;
+
+		// Collect file paths of previously selected cards
+		const selectedPaths = new Set<string>();
+		let activePath: string | null = null;
+		for (const idx of this.selection.selectedIndices) {
+			const item = oldItems[idx];
+			if (item?.type === 'note') selectedPaths.add(item.file.path);
+			else if (item?.type === 'timeline') selectedPaths.add(`timeline:${item.timelineId}`);
+		}
+		if (this.selection.activeIndex !== null) {
+			const active = oldItems[this.selection.activeIndex];
+			if (active?.type === 'note') activePath = active.file.path;
+			else if (active?.type === 'timeline') activePath = `timeline:${active.timelineId}`;
+		}
+
+		// Re-map to new indices
+		this.selection.selectedIndices.clear();
+		this.selection.activeIndex = null;
+		for (let i = 0; i < this.timelineItems.length; i++) {
+			const item = this.timelineItems[i]!;
+			const key = item.type === 'note' ? item.file.path : `timeline:${item.timelineId}`;
+			if (selectedPaths.has(key)) {
+				this.selection.selectedIndices.add(i);
+				if (key === activePath) {
+					this.selection.activeIndex = i;
+				}
+			}
+		}
+
+		// Update card data or clear if nothing matched
+		if (this.selection.activeIndex !== null) {
+			this.selection.updateCardData(this.selection.activeIndex, this.timelineItems, this.timeScale);
+		} else if (this.selection.selectedIndices.size > 0) {
+			const first = this.selection.selectedIndices.values().next().value as number;
+			this.selection.activeIndex = first;
+			this.selection.updateCardData(first, this.timelineItems, this.timeScale);
+		} else {
+			this.selection.selectedCardData = null;
+		}
+
+		this.pushSelectionToComponent();
+	}
+
 	// ── Card mutations (delegates to CardOperations) ────────
 
 	private captureItemState(item: TimelineItem): TimelineState {
@@ -333,6 +383,15 @@ export class TimelineView extends ItemView {
 			event, this.timelineItems, this.timeScale, this.rootPath, this.timelineId, this.app, this.cacheService
 		);
 		if (newItem) {
+			// Suppress the metadata-change refresh that will fire for this file —
+			// we already have the correct state in timelineItems.
+			if (newItem.type === 'note') {
+				this.expectedFileStates.set(newItem.file.path, {
+					dateStart: newItem.dateStart,
+					dateEnd: newItem.dateEnd,
+					timestamp: Date.now(),
+				});
+			}
 			this.component?.refreshItems?.(this.timelineItems);
 			const newIndex = this.timelineItems.length - 1;
 			this.selectCard(newIndex);
@@ -560,7 +619,9 @@ export class TimelineView extends ItemView {
 	}
 
 	private async refreshTimeline(): Promise<void> {
+		const oldItems = this.timelineItems;
 		this.timelineItems = await this.collectTimelineItems();
+		this.remapSelection(oldItems);
 		this.component?.refreshItems?.(this.timelineItems);
 	}
 
@@ -631,6 +692,7 @@ export class TimelineView extends ItemView {
 						if (event.shiftKey) {
 							this.toggleSelection(index);
 						} else {
+							this.clearSelection();
 							void this.openFile(index);
 						}
 					},
@@ -725,7 +787,9 @@ export class TimelineView extends ItemView {
 
 				if (this.metadataChangeTimeout) clearTimeout(this.metadataChangeTimeout);
 				this.metadataChangeTimeout = setTimeout(async () => {
+					const oldItems = this.timelineItems;
 					this.timelineItems = await this.collectTimelineItems();
+					this.remapSelection(oldItems);
 					this.component?.refreshItems?.(this.timelineItems);
 					this.scheduleTimelineCardRefresh();
 				}, 300);

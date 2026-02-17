@@ -72,11 +72,14 @@ export class LayerManager {
 	}
 
 	/**
-	 * Calculate layer number from Y position
-	 * Inverse of layerToY
+	 * Calculate layer number from Y position.
+	 *
+	 * Each card's top edge sits at layerToY(layer), and the card extends
+	 * downward by GRID_SPACING.  Using Math.floor ensures that any Y value
+	 * within a card's visual bounds maps to the correct layer.
 	 */
 	static yToLayer(y: number): number {
-		return -Math.round(y / GRID_SPACING);
+		return -Math.floor(y / GRID_SPACING);
 	}
 
 	/**

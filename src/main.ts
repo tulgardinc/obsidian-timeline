@@ -352,7 +352,13 @@ export default class TimelinePlugin extends Plugin {
 				const rootPath = view.getRootPath();
 				// Check if file is within this timeline's scope
 				if (rootPath === "" || file.path.startsWith(rootPath + "/") || file.path === rootPath) {
-					view.scheduleRefresh();
+					// Skip if the view already contains this file (e.g. created via canvas click)
+					const alreadyPresent = view.timelineItems.some(
+						i => i.type === 'note' && i.file.path === file.path
+					);
+					if (!alreadyPresent) {
+						view.scheduleRefresh();
+					}
 				}
 			}
 		}
