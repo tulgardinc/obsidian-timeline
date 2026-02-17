@@ -1,9 +1,12 @@
 # Timeline Plugin for Obsidian
 
-Display timeline cards on an infinite canvas with pan/zoom capabilities.
+View your notes in relation to each other on an infinte scrollable timeline/canvas.
 
-## Demo
-![Demo](./demo.gif)
+## Timeline Canvas
+![Demo](./assets/demo.gif)
+
+## Multiple Timeline Views
+![Timeline Settings](./assets/tlsettings.png)
 
 ## Features
 
