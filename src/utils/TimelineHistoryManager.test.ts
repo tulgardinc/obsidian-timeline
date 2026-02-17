@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { TimelineHistoryManager, type TimelineState, type HistoryEntry } from './TimelineHistoryManager';
 
-function mockFile(path: string): any {
-	return { path, basename: path.split('/').pop() ?? path };
+function mockFile(path: string): import('obsidian').TFile {
+	return { path, basename: path.split('/').pop() ?? path } as unknown as import('obsidian').TFile;
 }
 
 function state(dateStart: string, dateEnd: string, layer: number): TimelineState {

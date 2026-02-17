@@ -17,7 +17,7 @@ import { FileService } from "./FileService";
 import { LayerManager } from "../utils/LayerManager";
 import { TimeScaleManager } from "../utils/TimeScaleManager";
 import { TimelineDate } from "../utils/TimelineDate";
-import { debug, warn } from "../utils/debug";
+import { warn } from "../utils/debug";
 
 const TAG = "TimelineCardMgr";
 

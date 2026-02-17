@@ -34,7 +34,7 @@
 
 import { TimelineDate } from "./TimelineDate";
 
-export type ScaleLevel = 0 | 1 | 2 | 3 | 4 | number;
+export type ScaleLevel = number;
 
 export interface Marker {
 	screenX: number;
@@ -53,8 +53,6 @@ export interface ScaleInfo {
 // Thresholds for switching scale levels (pixels per unit)
 // When markers would be closer than MIN_MARKER_SPACING pixels, switch to next level
 const MIN_MARKER_SPACING = 8;
-const MAX_MARKER_SPACING = 100;
-
 // Base time scales (pixels per unit at scale=1) for each level
 const BASE_TIME_SCALES = [
 	1,      // Level 0: 1 px/day
@@ -220,8 +218,6 @@ export class TimeScaleManager {
 		translateX: number,
 		viewportWidth: number
 	): Marker[] {
-		const markers: Marker[] = [];
-		
 		// Calculate visible world coordinate range
 		// screenX = worldX + translateX, so worldX = screenX - translateX
 		const worldStartX = -translateX;
@@ -500,13 +496,11 @@ export class TimeScaleManager {
 			case 0: // Days - snap to nearest day
 				return Math.round(day);
 				
-			case 1: // Months - snap to nearest month boundary
-				// Get current month start
+			case 1: { // Months - snap to nearest month boundary
 				const currentMonthStart = TimelineDate.fromString(`${ymd.year}-${String(ymd.month).padStart(2, '0')}-01`);
 				if (!currentMonthStart) return day;
 				const currentMonthStartDay = currentMonthStart.getDaysFromEpoch();
 				
-				// Get next month start
 				let nextMonthYear = ymd.year;
 				let nextMonth = ymd.month + 1;
 				if (nextMonth > 12) {
@@ -517,44 +511,41 @@ export class TimeScaleManager {
 				if (!nextMonthStart) return currentMonthStartDay;
 				const nextMonthStartDay = nextMonthStart.getDaysFromEpoch();
 				
-				// Calculate midpoint and snap to nearest
 				const daysInMonth = nextMonthStartDay - currentMonthStartDay;
 				const midpoint = currentMonthStartDay + daysInMonth / 2;
 				return day < midpoint ? currentMonthStartDay : nextMonthStartDay;
+			}
 				
-			case 2: // Years - snap to nearest year boundary (Jan 1)
+			case 2: { // Years - snap to nearest year boundary (Jan 1)
 				const currentYearStart = TimelineDate.fromString(`${ymd.year}-01-01`);
 				if (!currentYearStart) return day;
 				const currentYearStartDay = currentYearStart.getDaysFromEpoch();
 				
-				// Get next year start
 				const nextYearStart = TimelineDate.fromString(`${ymd.year + 1}-01-01`);
 				if (!nextYearStart) return currentYearStartDay;
 				const nextYearStartDay = nextYearStart.getDaysFromEpoch();
 				
-				// Calculate midpoint (July 2 in normal years, July 1 in leap years roughly)
 				const daysInYear = nextYearStartDay - currentYearStartDay;
 				const yearMidpoint = currentYearStartDay + daysInYear / 2;
 				return day < yearMidpoint ? currentYearStartDay : nextYearStartDay;
+			}
 				
-			default: // Decades, centuries, millennia, etc.
+			default: { // Decades, centuries, millennia, etc.
 				const yearsPerUnit = Math.pow(10, level - 2);
 				
-				// Get current unit start
 				const unitStartYear = Math.floor(ymd.year / yearsPerUnit) * yearsPerUnit;
 				const currentUnitStart = TimelineDate.fromString(`${unitStartYear}-01-01`);
 				if (!currentUnitStart) return day;
 				const currentUnitStartDay = currentUnitStart.getDaysFromEpoch();
 				
-				// Get next unit start
 				const nextUnitStart = TimelineDate.fromString(`${unitStartYear + yearsPerUnit}-01-01`);
 				if (!nextUnitStart) return currentUnitStartDay;
 				const nextUnitStartDay = nextUnitStart.getDaysFromEpoch();
 				
-				// Calculate midpoint and snap to nearest
 				const daysInUnit = nextUnitStartDay - currentUnitStartDay;
 				const unitMidpoint = currentUnitStartDay + daysInUnit / 2;
 				return day < unitMidpoint ? currentUnitStartDay : nextUnitStartDay;
+			}
 		}
 	}
 	

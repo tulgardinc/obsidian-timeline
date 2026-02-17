@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { 
   CardCameraRenderer, 
   type CardWorldData,
-  type CardRenderData 
 } from './CardCameraRenderer';
 import type { ViewportState } from './CameraSystem';
 

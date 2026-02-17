@@ -189,7 +189,7 @@ export class TimelineCacheService {
 				notes: {}
 			};
 		}
-		return this.cache.timelines[timelineId]!;
+		return this.cache.timelines[timelineId];
 	}
 
 	/**
@@ -220,7 +220,7 @@ export class TimelineCacheService {
 	 */
 	async getOrCreateNoteId(file: TFile): Promise<string> {
 		const metadata = this.app.metadataCache.getFileCache(file);
-		const existingId = metadata?.frontmatter?.['timeline-id'];
+		const existingId = metadata?.frontmatter?.['timeline-id'] as unknown;
 		
 		if (existingId && typeof existingId === 'string') {
 			return existingId;
@@ -231,7 +231,7 @@ export class TimelineCacheService {
 		
 		// Inject into file frontmatter using the safe processFrontMatter API
 		try {
-			await this.app.fileManager.processFrontMatter(file, (fm) => {
+			await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
 				fm['timeline-id'] = newId;
 			});
 		} catch (error) {
@@ -246,7 +246,7 @@ export class TimelineCacheService {
 	 */
 	getNoteId(file: TFile): string | undefined {
 		const metadata = this.app.metadataCache.getFileCache(file);
-		const id = metadata?.frontmatter?.['timeline-id'];
+		const id = metadata?.frontmatter?.['timeline-id'] as unknown;
 		return typeof id === 'string' ? id : undefined;
 	}
 

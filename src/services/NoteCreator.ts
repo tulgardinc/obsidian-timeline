@@ -93,7 +93,7 @@ Created from timeline view.
 		return newItem;
 	} catch (error) {
 		console.error('Timeline: Failed to create note from click:', error);
-		new Notice(`Failed to create note: ${error}`);
+		new Notice(`Failed to create note: ${error instanceof Error ? error.message : String(error)}`);
 		return null;
 	}
 }

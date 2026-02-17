@@ -6,7 +6,7 @@
  * avoid duplicated regex-based frontmatter replacement.
  */
 
-import { type App, type TFile, Notice } from "obsidian";
+import { type App, Notice } from "obsidian";
 import type { TimelineItem } from "../types/timelineTypes";
 import type { TimelineCacheService } from "./TimelineCacheService";
 import type { TimelineColor } from "../utils/LayerManager";
@@ -150,7 +150,7 @@ export async function applyColorToItems(
 	for (const item of selectedItems) {
 		if (item.type === 'note') {
 			try {
-				await app.fileManager.processFrontMatter(item.file, (fm) => {
+				await app.fileManager.processFrontMatter(item.file, (fm: Record<string, unknown>) => {
 					if (color) {
 						fm['color'] = color;
 					} else {

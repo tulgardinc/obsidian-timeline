@@ -50,14 +50,14 @@ export default class TimelinePlugin extends Plugin {
 		);
 
 		// Add ribbon icon to open Timeline view
-		this.addRibbonIcon('calendar', 'Open Timeline view', () => {
+		this.addRibbonIcon('calendar', 'Open timeline view', () => {
 			this.openTimelineSelector();
 		});
 
 		// Add command to open Timeline view (fuzzy finder)
 		this.addCommand({
-			id: 'open-timeline-view',
-			name: 'Open Timeline view',
+			id: 'open-view',
+			name: 'Open view',
 			callback: () => {
 				this.openTimelineSelector();
 			}
@@ -65,8 +65,8 @@ export default class TimelinePlugin extends Plugin {
 
 		// Add command to undo last timeline operation
 		this.addCommand({
-			id: 'timeline-undo',
-			name: 'Undo last timeline change',
+			id: 'undo',
+			name: 'Undo last change',
 			callback: () => {
 				const view = this.app.workspace.getActiveViewOfType(TimelineView);
 				if (view) {
@@ -77,8 +77,8 @@ export default class TimelinePlugin extends Plugin {
 
 		// Add command to redo last undone timeline operation
 		this.addCommand({
-			id: 'timeline-redo',
-			name: 'Redo last timeline change',
+			id: 'redo',
+			name: 'Redo last change',
 			callback: () => {
 				const view = this.app.workspace.getActiveViewOfType(TimelineView);
 				if (view) {
@@ -89,7 +89,7 @@ export default class TimelinePlugin extends Plugin {
 
 		// Add command to go to a specific note in the timeline
 		this.addCommand({
-			id: 'timeline-go-to-note',
+			id: 'go-to-note',
 			name: 'Go to note',
 			callback: () => {
 				const view = this.app.workspace.getActiveViewOfType(TimelineView);
@@ -111,8 +111,8 @@ export default class TimelinePlugin extends Plugin {
 
 		// Add command to view current note in timeline (fit to view)
 		this.addCommand({
-			id: 'view-in-timeline',
-			name: 'View in Timeline',
+			id: 'view-current-note',
+			name: 'View current note',
 			editorCallback: async (_editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				const file = ctx.file;
 				if (!file) return;
@@ -138,8 +138,8 @@ export default class TimelinePlugin extends Plugin {
 
 		// Add command to add a timeline card to the current timeline
 		this.addCommand({
-			id: 'add-timeline-card',
-			name: 'Add Timeline',
+			id: 'add-card',
+			name: 'Add card',
 			callback: () => {
 				const view = this.app.workspace.getActiveViewOfType(TimelineView);
 				if (!view) {
@@ -156,7 +156,7 @@ export default class TimelinePlugin extends Plugin {
 				new TimelineSelectorModal(
 					this.app,
 					timelines,
-					(timeline) => view.addTimelineCard(timeline.id, timeline.name)
+					(timeline) => { void view.addTimelineCard(timeline.id, timeline.name); }
 				).open();
 			}
 		});
@@ -208,7 +208,6 @@ export default class TimelinePlugin extends Plugin {
 
 	onunload() {
 		void this.cacheService.forceSave();
-		this.app.workspace.detachLeavesOfType(VIEW_TYPE_TIMELINE);
 	}
 
 	// ── Helpers ──────────────────────────────────────────────
@@ -269,12 +268,12 @@ export default class TimelinePlugin extends Plugin {
 		for (const leaf of leaves) {
 			const view = leaf.view;
 			if (view instanceof TimelineView && typeof view.getTimelineId === 'function' && view.getTimelineId() === config.id) {
-				workspace.revealLeaf(leaf);
+				await workspace.revealLeaf(leaf);
 				return;
 			}
 			const viewState = leaf.getViewState();
 			if (viewState?.type === VIEW_TYPE_TIMELINE && viewState.state?.timelineId === config.id) {
-				workspace.revealLeaf(leaf);
+				await workspace.revealLeaf(leaf);
 				const revealedView = leaf.view;
 				if (revealedView instanceof TimelineView) {
 					revealedView.setTimelineConfig(config);
@@ -285,7 +284,7 @@ export default class TimelinePlugin extends Plugin {
 
 		const leaf = workspace.getRightLeaf(false);
 		if (!leaf) {
-			new Notice("Could not create Timeline view");
+			new Notice("Could not create timeline view");
 			return;
 		}
 
@@ -295,7 +294,7 @@ export default class TimelinePlugin extends Plugin {
 			state: { timelineId: config.id }
 		});
 
-		workspace.revealLeaf(leaf);
+		await workspace.revealLeaf(leaf);
 		await new Promise(resolve => requestAnimationFrame(resolve));
 
 		const view = leaf.view as TimelineView;

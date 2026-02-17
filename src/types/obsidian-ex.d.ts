@@ -1,7 +1,7 @@
 // Type declarations for undocumented Obsidian APIs
 // These are internal APIs that work but aren't officially supported
 
-import "obsidian";
+import { type Menu } from "obsidian";
 
 declare module "obsidian" {
   interface MenuItem {

@@ -179,7 +179,7 @@ export class TimelineDate {
 		const year = ymd.year;
 
 		switch (level) {
-			case 0: // Days - Full date: DD/MM/YYYY or MM/DD/YYYY depending on setting
+			case 0: { // Days - Full date: DD/MM/YYYY or MM/DD/YYYY depending on setting
 				const dayStr = String(ymd.day).padStart(2, '0');
 				const monthStr = String(ymd.month).padStart(2, '0');
 				const yearAbs = Math.abs(year);
@@ -197,8 +197,9 @@ export class TimelineDate {
 					return `${datePart}/${yearAbs} BCE`;
 				}
 				return `${datePart}/${year}`;
+			}
 
-			case 1: // Months - Month/Year format
+			case 1: { // Months - Month/Year format
 				const monthStr2 = String(ymd.month).padStart(2, '0');
 				const yearAbs2 = Math.abs(year);
 				
@@ -211,6 +212,7 @@ export class TimelineDate {
 					return `${monthStr2}/${yearAbs2} BCE`;
 				}
 				return `${monthStr2}/${year}`;
+			}
 
 			default: // Years and larger units
 				return this.formatYear(year);

@@ -4,8 +4,8 @@ import { TimelineDate } from './TimelineDate';
 import type { LayerableItem } from './LayerManager';
 
 // Helper to create mock TFile objects for testing
-function mockFile(path: string): any {
-  return { path, basename: path.split('/').pop() ?? path };
+function mockFile(path: string): import('obsidian').TFile {
+  return { path, basename: path.split('/').pop() ?? path } as unknown as import('obsidian').TFile;
 }
 
 // Helper to create a LayerableItem

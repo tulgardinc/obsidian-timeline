@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, FuzzySuggestModal, TFolder, Notice, Modal, setIcon } from "obsidian";
+import { App, PluginSettingTab, Setting, FuzzySuggestModal, TFolder, Modal, setIcon } from "obsidian";
 import type TimelinePlugin from "./main";
 import { IconPickerModal } from "./modals/IconPickerModal";
 import { TimelineDate, type DateFormatStyle } from "./utils/TimelineDate";
@@ -122,10 +122,10 @@ export class TimelineSettingTab extends PluginSettingTab {
 		// Date format setting
 		new Setting(containerEl)
 			.setName("Date format")
-			.setDesc("Day-level date display: DD/MM/YYYY (European) or MM/DD/YYYY (US)")
+			.setDesc("Choose the order for day-level date display")
 			.addDropdown(dropdown => dropdown
-				.addOption("DD/MM/YYYY", "DD/MM/YYYY")
-				.addOption("MM/DD/YYYY", "MM/DD/YYYY")
+				.addOption("DD/MM/YYYY", "Day/month/year")
+				.addOption("MM/DD/YYYY", "Month/day/year")
 				.setValue(this.plugin.settings.dateFormat)
 				.onChange(async (value) => {
 					this.plugin.settings.dateFormat = value as DateFormatStyle;
@@ -134,11 +134,10 @@ export class TimelineSettingTab extends PluginSettingTab {
 				}));
 
 		// Header
-		containerEl.createEl("h2", { text: "Timeline views" });
-		containerEl.createEl("p", {
-			text: "Configure timeline views that scan specific directories for timeline items.",
-			cls: "setting-item-description"
-		});
+		new Setting(containerEl)
+			.setName("Views")
+			.setDesc("Configure views that scan specific directories for items.")
+			.setHeading();
 
 		// Add new timeline button
 		new Setting(containerEl)
@@ -158,10 +157,8 @@ export class TimelineSettingTab extends PluginSettingTab {
 		const timelineViews = this.plugin.settings.timelineViews;
 
 		if (timelineViews.length === 0) {
-			containerEl.createEl("p", {
-				text: "No timeline views configured. Click 'Add' to create one.",
-				cls: "setting-item-description"
-			});
+			new Setting(containerEl)
+				.setDesc("No views configured. Select 'add' to create one.");
 		} else {
 			for (const timeline of timelineViews) {
 				this.renderTimelineItem(containerEl, timeline);
@@ -187,11 +184,12 @@ export class TimelineSettingTab extends PluginSettingTab {
 			.setIcon(currentIcon)
 			.setTooltip(`Change icon (${currentIcon})`)
 			.onClick(() => {
-				new IconPickerModal(this.app, async (iconId) => {
+				new IconPickerModal(this.app, (iconId) => {
 					timeline.icon = iconId;
-					await this.plugin.saveSettings();
-					this.plugin.updateOpenTimelineViews();
-					this.display();
+					void this.plugin.saveSettings().then(() => {
+						this.plugin.updateOpenTimelineViews();
+						this.display();
+					});
 				}).open();
 			}));
 
@@ -216,13 +214,13 @@ export class TimelineSettingTab extends PluginSettingTab {
 			.setIcon("trash")
 			.setTooltip("Delete")
 			.setWarning()
-			.onClick(async () => {
-				await this.deleteTimeline(timeline.id);
+			.onClick(() => {
+				void this.deleteTimeline(timeline.id);
 			}));
 	}
 
 	private showAddTimelineModal(): void {
-		new FolderSuggestModal(this.app, async (folder) => {
+		new FolderSuggestModal(this.app, (folder) => {
 			if (!folder) return;
 
 			const rootPath = folder.path === "/" ? "" : folder.path;
@@ -235,29 +233,26 @@ export class TimelineSettingTab extends PluginSettingTab {
 			};
 
 			this.plugin.settings.timelineViews.push(newTimeline);
-			await this.plugin.saveSettings();
-			this.display(); // Refresh the settings tab
+			void this.plugin.saveSettings().then(() => this.display());
 		}).open();
 	}
 
 	private showEditNameModal(timeline: TimelineViewConfig): void {
-		const modal = new EditNameModal(this.app, timeline.name, async (newName) => {
+		const modal = new EditNameModal(this.app, timeline.name, (newName) => {
 			if (newName && newName.trim()) {
 				timeline.name = newName.trim();
-				await this.plugin.saveSettings();
-				this.display(); // Refresh the settings tab
+				void this.plugin.saveSettings().then(() => this.display());
 			}
 		});
 		modal.open();
 	}
 
 	private showChangeFolderModal(timeline: TimelineViewConfig): void {
-		new FolderSuggestModal(this.app, async (folder) => {
+		new FolderSuggestModal(this.app, (folder) => {
 			if (!folder) return;
 
 			timeline.rootPath = folder.path === "/" ? "" : folder.path;
-			await this.plugin.saveSettings();
-			this.display(); // Refresh the settings tab
+			void this.plugin.saveSettings().then(() => this.display());
 		}).open();
 	}
 
@@ -302,8 +297,7 @@ class EditNameModal extends Modal {
 			value: this.currentName,
 			cls: "timeline-name-input"
 		});
-		this.inputEl.style.width = "100%";
-		this.inputEl.style.marginBottom = "1em";
+		this.inputEl.addClass("timeline-name-input-full");
 
 		// Focus and select all text
 		this.inputEl.focus();

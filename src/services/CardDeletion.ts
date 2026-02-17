@@ -24,7 +24,7 @@ export async function removeCardsFromTimeline(
 
 	for (const file of files) {
 		try {
-			await app.fileManager.processFrontMatter(file, (fm) => {
+			await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
 				delete fm['timeline'];
 			});
 			successCount++;
@@ -61,7 +61,7 @@ export async function moveCardsToTrash(
 
 	for (const file of files) {
 		try {
-			await app.vault.trash(file, false);
+			await app.fileManager.trashFile(file);
 			successCount++;
 
 			if (cacheService) {

@@ -14,10 +14,10 @@
  *   TimelineHistoryManager – undo / redo stack
  */
 
-import { ItemView, WorkspaceLeaf, TFile, Notice, Menu } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, Notice } from "obsidian";
 import Timeline from "../components/Timeline.svelte";
 import { mount, unmount } from "svelte";
-import { LayerManager, type TimelineColor } from "../utils/LayerManager";
+import { LayerManager } from "../utils/LayerManager";
 import { TimelineHistoryManager, type TimelineState, type HistoryEntry } from "../utils/TimelineHistoryManager";
 import { TimeScaleManager } from "../utils/TimeScaleManager";
 import { TimelineDate } from "../utils/TimelineDate";
@@ -125,7 +125,7 @@ export class TimelineView extends ItemView {
 		this.rootPath = config.rootPath;
 
 		// Update the tab title to reflect the timeline name (using internal API)
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
 		(this.leaf as any).updateHeader();
 
 		if (this.cacheService) {
@@ -438,9 +438,9 @@ export class TimelineView extends ItemView {
 		new DeleteConfirmModal(
 			this.app,
 			null,
-			async (action: DeleteAction) => {
+			(action: DeleteAction) => {
 				if (action === 'remove-from-timeline') {
-					await this.removeTimelineCard(timelineId);
+					void this.removeTimelineCard(timelineId);
 				}
 			},
 			'Remove timeline from view?',
@@ -453,22 +453,25 @@ export class TimelineView extends ItemView {
 	private handleDeleteCard(): void {
 		const noteItems = this.selection.getSelectedNoteItems(this.timelineItems);
 		if (noteItems.length === 0) {
-			new Notice('Timeline cards cannot be deleted - use Remove instead');
+			new Notice('Timeline cards cannot be deleted - use remove instead');
 			return;
 		}
 
-		new DeleteConfirmModal(this.app, noteItems[0]!.file, async (action: DeleteAction) => {
+		new DeleteConfirmModal(this.app, noteItems[0]!.file, (action: DeleteAction) => {
 			const files = noteItems.map(i => i.file);
-			switch (action) {
-				case 'remove-from-timeline':
-					await removeCardsFromTimeline(files, this.timelineId, this.app, this.cacheService);
-					break;
-				case 'move-to-trash':
-					await moveCardsToTrash(files, this.timelineId, this.app, this.cacheService);
-					break;
-			}
-			this.clearSelection();
-			await this.refreshTimeline();
+			const doDelete = async () => {
+				switch (action) {
+					case 'remove-from-timeline':
+						await removeCardsFromTimeline(files, this.timelineId, this.app, this.cacheService);
+						break;
+					case 'move-to-trash':
+						await moveCardsToTrash(files, this.timelineId, this.app, this.cacheService);
+						break;
+				}
+				this.clearSelection();
+				await this.refreshTimeline();
+			};
+			void doDelete();
 		}, undefined, noteItems.length).open();
 	}
 
@@ -786,12 +789,14 @@ export class TimelineView extends ItemView {
 				}
 
 				if (this.metadataChangeTimeout) clearTimeout(this.metadataChangeTimeout);
-				this.metadataChangeTimeout = setTimeout(async () => {
-					const oldItems = this.timelineItems;
-					this.timelineItems = await this.collectTimelineItems();
-					this.remapSelection(oldItems);
-					this.component?.refreshItems?.(this.timelineItems);
-					this.scheduleTimelineCardRefresh();
+				this.metadataChangeTimeout = setTimeout(() => {
+					void (async () => {
+						const oldItems = this.timelineItems;
+						this.timelineItems = await this.collectTimelineItems();
+						this.remapSelection(oldItems);
+						this.component?.refreshItems?.(this.timelineItems);
+						this.scheduleTimelineCardRefresh();
+					})();
 				}, 300);
 			})
 		);
@@ -841,6 +846,6 @@ export class TimelineView extends ItemView {
 		if (this.metadataChangeTimeout) { clearTimeout(this.metadataChangeTimeout); this.metadataChangeTimeout = null; }
 		if (this.viewportSaveTimeout) { clearTimeout(this.viewportSaveTimeout); this.viewportSaveTimeout = null; }
 		if (this.timelineCardRefreshTimeout) { clearTimeout(this.timelineCardRefreshTimeout); this.timelineCardRefreshTimeout = null; }
-		if (this.component) { unmount(this.component); this.component = null; }
+		if (this.component) { void unmount(this.component); this.component = null; }
 	}
 }

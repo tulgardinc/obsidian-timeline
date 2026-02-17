@@ -68,25 +68,28 @@ export class FileService {
 				continue;
 			}
 
-			const dateStartRaw = metadata.frontmatter['date-start'];
-			const dateEndRaw = metadata.frontmatter['date-end'];
+			const dateStartRaw = metadata.frontmatter['date-start'] as unknown;
+			const dateEndRaw = metadata.frontmatter['date-end'] as unknown;
 
 			if (!dateStartRaw || !dateEndRaw) {
 				debug('FileService', `Skipping ${file.basename} - missing date-start or date-end`);
 				continue;
 			}
 
-			const dateStart = TimelineDate.fromString(String(dateStartRaw));
-			const dateEnd = TimelineDate.fromString(String(dateEndRaw));
+			const startStr = typeof dateStartRaw === 'string' ? dateStartRaw : String(dateStartRaw as string | number);
+			const endStr = typeof dateEndRaw === 'string' ? dateEndRaw : String(dateEndRaw as string | number);
+			const dateStart = TimelineDate.fromString(startStr);
+			const dateEnd = TimelineDate.fromString(endStr);
 
 			if (!dateStart || !dateEnd) {
 				debug('FileService', `Skipping ${file.basename} - invalid date format`);
 				continue;
 			}
 
-			const colorRaw = metadata.frontmatter['color'];
+			const colorRaw = String(metadata.frontmatter['color'] ?? '');
 			const validColors = ['red', 'blue', 'green', 'yellow'] as const;
-			const color = validColors.includes(colorRaw) ? colorRaw : undefined;
+			type ValidColor = typeof validColors[number];
+			const color: ValidColor | undefined = validColors.includes(colorRaw as ValidColor) ? colorRaw as ValidColor : undefined;
 
 			layerableItems.push({
 				file,
@@ -130,7 +133,7 @@ export class FileService {
 	 * Update file dates (static - usable without a FileService instance)
 	 */
 	static async updateFileDatesStatic(app: App, file: TFile, dateStart: string, dateEnd: string): Promise<void> {
-		await app.fileManager.processFrontMatter(file, (fm) => {
+		await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
 			fm['date-start'] = dateStart;
 			fm['date-end'] = dateEnd;
 		});

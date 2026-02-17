@@ -27,7 +27,7 @@ export function showCardContextMenu(
 
 	// Fit to View
 	menu.addItem((mi) => {
-		mi.setTitle("Fit to View")
+		mi.setTitle("Fit to view")
 			.setIcon("maximize")
 			.onClick(() => callbacks.onFitToView());
 	});

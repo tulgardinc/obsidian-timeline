@@ -236,7 +236,8 @@ describe('TimelineDate', () => {
 
     it('should format BCE years correctly', () => {
       // Year 0 = 1 BCE, Year -1 = 2 BCE
-      const date = TimelineDate.fromDaysFromEpoch(
+      // Verify roundtrip works
+      TimelineDate.fromDaysFromEpoch(
         TimelineDate.fromString('1970-01-01')!.getDaysFromEpoch()
       );
       // Test with year 0
