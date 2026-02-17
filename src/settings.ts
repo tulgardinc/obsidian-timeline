@@ -186,10 +186,11 @@ export class TimelineSettingTab extends PluginSettingTab {
 			.onClick(() => {
 				new IconPickerModal(this.app, (iconId) => {
 					timeline.icon = iconId;
-					void this.plugin.saveSettings().then(() => {
+					void (async () => {
+						await this.plugin.saveSettings();
 						this.plugin.updateOpenTimelineViews();
 						this.display();
-					});
+					})();
 				}).open();
 			}));
 
@@ -233,7 +234,10 @@ export class TimelineSettingTab extends PluginSettingTab {
 			};
 
 			this.plugin.settings.timelineViews.push(newTimeline);
-			void this.plugin.saveSettings().then(() => this.display());
+			void (async () => {
+				await this.plugin.saveSettings();
+				this.display();
+			})();
 		}).open();
 	}
 
@@ -241,7 +245,10 @@ export class TimelineSettingTab extends PluginSettingTab {
 		const modal = new EditNameModal(this.app, timeline.name, (newName) => {
 			if (newName && newName.trim()) {
 				timeline.name = newName.trim();
-				void this.plugin.saveSettings().then(() => this.display());
+				void (async () => {
+					await this.plugin.saveSettings();
+					this.display();
+				})();
 			}
 		});
 		modal.open();
@@ -252,7 +259,10 @@ export class TimelineSettingTab extends PluginSettingTab {
 			if (!folder) return;
 
 			timeline.rootPath = folder.path === "/" ? "" : folder.path;
-			void this.plugin.saveSettings().then(() => this.display());
+			void (async () => {
+				await this.plugin.saveSettings();
+				this.display();
+			})();
 		}).open();
 	}
 

@@ -12,6 +12,7 @@ const TAG = "Plugin";
 export default class TimelinePlugin extends Plugin {
 	settings!: TimelinePluginSettings;
 	cacheService!: TimelineCacheService;
+	private fileCreateTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	// ── TimelinePluginContext implementation ─────────────────
 
@@ -91,21 +92,22 @@ export default class TimelinePlugin extends Plugin {
 		this.addCommand({
 			id: 'go-to-note',
 			name: 'Go to note',
-			callback: () => {
+			callback: async () => {
 				const view = this.app.workspace.getActiveViewOfType(TimelineView);
 				if (!view || view.timelineItems.length === 0) {
 					new Notice('No timeline items available');
 					return;
 				}
-				void import('./modals/TimelineItemSuggestModal').then(({ TimelineItemSuggestModal }) => {
+				try {
+					const { TimelineItemSuggestModal } = await import('./modals/TimelineItemSuggestModal');
 					new TimelineItemSuggestModal(
 						this.app,
 						view.timelineItems,
 						(item) => view.goToItem(item)
 					).open();
-				}).catch((error) => {
+				} catch (error) {
 					console.error('Timeline: Failed to load suggest modal:', error);
-				});
+				}
 			}
 		});
 
@@ -196,7 +198,9 @@ export default class TimelinePlugin extends Plugin {
 			this.app.vault.on('create', (file) => {
 				if (file instanceof TFile && file.extension === 'md') {
 					// Debounce to allow metadata cache to populate
-					setTimeout(() => {
+					if (this.fileCreateTimeout) clearTimeout(this.fileCreateTimeout);
+					this.fileCreateTimeout = setTimeout(() => {
+						this.fileCreateTimeout = null;
 						this.handleFileCreate(file);
 					}, 100);
 				}
@@ -207,6 +211,10 @@ export default class TimelinePlugin extends Plugin {
 	}
 
 	onunload() {
+		if (this.fileCreateTimeout) {
+			clearTimeout(this.fileCreateTimeout);
+			this.fileCreateTimeout = null;
+		}
 		void this.cacheService.forceSave();
 	}
 

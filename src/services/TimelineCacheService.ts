@@ -1,4 +1,4 @@
-import { type App, TFile } from 'obsidian';
+import { type App, TFile, normalizePath } from 'obsidian';
 import { LayerManager, type LayerableItem, type LayerAssignment } from '../utils/LayerManager';
 import { debug } from '../utils/debug';
 
@@ -49,7 +49,8 @@ export interface TimelineCache {
 }
 
 const CACHE_VERSION = 1;
-const CACHE_FILE_PATH = './.timelines/timelines.json';
+const CACHE_DIR_PATH = normalizePath('.timelines');
+const CACHE_FILE_PATH = normalizePath('.timelines/timelines.json');
 const VIEWPORT_SAVE_DEBOUNCE = 500; // ms
 const TAG = 'TimelineCacheService';
 
@@ -86,8 +87,10 @@ export class TimelineCacheService {
 	 */
 	private async loadCache(): Promise<void> {
 		try {
-			// Use adapter.exists() and adapter.read() to bypass vault metadata cache
-			// (vault cache may not be fully populated during plugin onload)
+			// Adapter is used intentionally here: loadCache() runs during plugin
+			// onload(), before the Vault metadata cache has finished indexing.
+			// vault.getFileByPath() would return null for the cache file at this
+			// point, causing saved viewport/layer state to be silently discarded.
 			const fileExists = await this.app.vault.adapter.exists(CACHE_FILE_PATH);
 			if (fileExists) {
 				const content = await this.app.vault.adapter.read(CACHE_FILE_PATH);
@@ -131,34 +134,19 @@ export class TimelineCacheService {
 		if (!this.isLoaded) return;
 		
 		try {
-			// Ensure the timelines directory exists
-			const dirPath = './.timelines';
-			const dirExists = await this.app.vault.adapter.exists(dirPath);
+			// Adapter is used here intentionally: the cache lives in a
+			// dot-prefixed directory (.timelines/) which Obsidian excludes from
+			// its Vault metadata index.  vault.getFileByPath() will never find
+			// these files, so Vault API reads/writes would silently fail.
+			const dirExists = await this.app.vault.adapter.exists(CACHE_DIR_PATH);
 			if (!dirExists) {
 				debug('Cache', 'Creating timelines directory');
-				await this.app.vault.adapter.mkdir(dirPath);
+				await this.app.vault.adapter.mkdir(CACHE_DIR_PATH);
 			}
 			
-			// Write the cache file
 			const content = JSON.stringify(this.cache, null, 2);
 			debug('Cache', 'Saving cache to disk');
-			
-			// Check if file exists using adapter (more reliable than getAbstractFileByPath)
-			const fileExists = await this.app.vault.adapter.exists(CACHE_FILE_PATH);
-			
-			if (fileExists) {
-				// File exists - get the TFile and modify it
-				const file = this.app.vault.getAbstractFileByPath(CACHE_FILE_PATH);
-				if (file instanceof TFile) {
-					await this.app.vault.modify(file, content);
-				} else {
-					// File exists but not in vault cache - use adapter write
-					await this.app.vault.adapter.write(CACHE_FILE_PATH, content);
-				}
-			} else {
-				// File doesn't exist - create it
-				await this.app.vault.create(CACHE_FILE_PATH, content);
-			}
+			await this.app.vault.adapter.write(CACHE_FILE_PATH, content);
 			debug('Cache', 'Save complete');
 		} catch (error) {
 			console.error('Timeline: Failed to save cache:', error);

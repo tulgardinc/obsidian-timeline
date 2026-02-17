@@ -423,9 +423,10 @@ export class TimelineView extends ItemView {
 			},
 			onApplyColor: (color) => {
 				const selected = this.selection.getSelectedItems(this.timelineItems);
-				void applyColorToItems(selected, color, this.timelineId, this.app, this.cacheService).then(() => {
+				void (async () => {
+					await applyColorToItems(selected, color, this.timelineId, this.app, this.cacheService);
 					this.component?.refreshItems?.(this.timelineItems);
-				});
+				})();
 			},
 			onDelete: () => this.handleDeleteCard(),
 			onRemoveTimelineCard: (tlId) => this.handleRemoveTimelineCard(tlId),
@@ -631,13 +632,16 @@ export class TimelineView extends ItemView {
 	private scheduleTimelineCardRefresh(): void {
 		if (this.timelineCardRefreshTimeout) clearTimeout(this.timelineCardRefreshTimeout);
 		this.timelineCardRefreshTimeout = setTimeout(() => {
-			if (this.cacheService && this.pluginCtx) {
-				void refreshTimelineCards(
-					this.timelineItems, this.timelineId, this.timeScale,
-					this.app, this.cacheService, this.pluginCtx
-				).then(updated => {
+			const cache = this.cacheService;
+			const ctx = this.pluginCtx;
+			if (cache && ctx) {
+				void (async () => {
+					const updated = await refreshTimelineCards(
+						this.timelineItems, this.timelineId, this.timeScale,
+						this.app, cache, ctx
+					);
 					if (updated) this.component?.refreshItems?.(this.timelineItems);
-				});
+				})();
 			}
 		}, 300);
 	}
@@ -846,6 +850,7 @@ export class TimelineView extends ItemView {
 		if (this.metadataChangeTimeout) { clearTimeout(this.metadataChangeTimeout); this.metadataChangeTimeout = null; }
 		if (this.viewportSaveTimeout) { clearTimeout(this.viewportSaveTimeout); this.viewportSaveTimeout = null; }
 		if (this.timelineCardRefreshTimeout) { clearTimeout(this.timelineCardRefreshTimeout); this.timelineCardRefreshTimeout = null; }
+		if (this.fileChangeRefreshTimeout) { clearTimeout(this.fileChangeRefreshTimeout); this.fileChangeRefreshTimeout = null; }
 		if (this.component) { void unmount(this.component); this.component = null; }
 	}
 }

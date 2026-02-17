@@ -5,7 +5,7 @@
  * detection, and cache registration for new notes.
  */
 
-import { type App, Notice } from "obsidian";
+import { type App, Notice, normalizePath } from "obsidian";
 import type { TimelineItem } from "../types/timelineTypes";
 import type { TimelineCacheService } from "./TimelineCacheService";
 import { LayerManager } from "../utils/LayerManager";
@@ -44,16 +44,14 @@ export async function createNoteFromClick(
 		const targetLayer = LayerManager.yToLayer(event.worldY);
 		const finalLayer = LayerManager.findAvailableLayerForItems(targetLayer, startDate, endDate, items);
 
-		const root = rootPath === '' ? '/' : rootPath;
-		const prefix = root === '/' ? '' : rootPath;
 		const ymd = startDate.getYMD();
 		const baseName = `Timeline note ${ymd.year}-${String(ymd.month).padStart(2, '0')}-${String(ymd.day).padStart(2, '0')}`;
 		let fileName = `${baseName}.md`;
-		let filePath = `${prefix}/${fileName}`;
+		let filePath = normalizePath(rootPath ? `${rootPath}/${fileName}` : fileName);
 		let counter = 1;
 		while (app.vault.getAbstractFileByPath(filePath)) {
 			fileName = `${baseName} ${counter}.md`;
-			filePath = `${prefix}/${fileName}`;
+			filePath = normalizePath(rootPath ? `${rootPath}/${fileName}` : fileName);
 			counter++;
 		}
 

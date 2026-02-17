@@ -53,15 +53,26 @@ export function showCardContextMenu(
 				ci.setTitle(opt.label)
 					.onClick(() => callbacks.onApplyColor(opt.color));
 
-				requestAnimationFrame(() => {
-					if (ci.dom) {
-						const iconSpan = ci.dom.querySelector('.menu-item-icon');
-						if (iconSpan) {
-							iconSpan.className = `menu-item-icon ${opt.cssClass}`;
-							iconSpan.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>';
-						}
+			requestAnimationFrame(() => {
+				if (ci.dom) {
+					const iconSpan = ci.dom.querySelector('.menu-item-icon');
+					if (iconSpan) {
+						iconSpan.className = `menu-item-icon ${opt.cssClass}`;
+						iconSpan.empty();
+						const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+						svg.setAttribute('viewBox', '0 0 24 24');
+						svg.setAttribute('width', '18');
+						svg.setAttribute('height', '18');
+						svg.setAttribute('fill', 'currentColor');
+						const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+						circle.setAttribute('cx', '12');
+						circle.setAttribute('cy', '12');
+						circle.setAttribute('r', '10');
+						svg.appendChild(circle);
+						iconSpan.appendChild(svg);
 					}
-				});
+				}
+			});
 			});
 		}
 	});

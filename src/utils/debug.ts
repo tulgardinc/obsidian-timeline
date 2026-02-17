@@ -29,8 +29,10 @@ export function debug(prefix: string, ...args: unknown[]): void {
 }
 
 /**
- * Always-on warning (still goes through console.warn).
+ * Log a warning message.  No-ops when debug is disabled.
  */
 export function warn(prefix: string, ...args: unknown[]): void {
-	console.warn(`[${prefix}]`, ...args);
+	if (DEBUG_ENABLED) {
+		console.warn(`[${prefix}]`, ...args);
+	}
 }
