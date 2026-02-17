@@ -55,4 +55,4 @@ Open **Settings -> Timeline** to create named timelines scoped to specific folde
 
 ## License
 
-0-BSD
+MIT
