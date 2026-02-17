@@ -131,6 +131,8 @@
 	let dragStartY = $state(0);
 	let dragStartWidth = $state(0);
 	let dragThresholdMet = $state(false);
+	/** Survives until the click handler consumes it, preventing click-after-drag. */
+	let didInteract = false;
 	let lastClickEvent = $state<MouseEvent | null>(null);
 
 	let cardRef: HTMLDivElement;
@@ -163,6 +165,7 @@
 		if (isMouseDown && !isMoving && !dragThresholdMet && 
 			(Math.abs(event.clientX - startMouseX) > 3 || Math.abs(event.clientY - startMouseY) > 3)) {
 			dragThresholdMet = true;
+			didInteract = true;
 			isMoving = true;
 			
 			// Notify parent that drag has started
@@ -305,6 +308,7 @@
 			event.stopPropagation();
 			
 			isResizing = true;
+			didInteract = true;
 			startMouseX = event.clientX;
 			dragStartX = worldX; // Use local world coordinate state
 			dragStartWidth = worldWidth; // Use local world coordinate state
@@ -433,11 +437,14 @@
 		// Stop click from bubbling to canvas (prevents deselection)
 		event.stopPropagation();
 		
-		// Only call onClick if this wasn't a drag/resize operation
-		// (handleMouseUp already calls onClick if there was no drag)
-		if (!isMoving && !isResizing && !dragThresholdMet) {
-			onClick?.(event);
+		// Only open the note on a genuine click — not after a drag or resize.
+		// didInteract is set when a drag/resize begins and is NOT cleared in
+		// handleMouseUp, so it reliably survives until this click handler runs.
+		if (didInteract) {
+			didInteract = false;
+			return;
 		}
+		onClick?.(event);
 	}
 
 	function handleContextMenu(event: MouseEvent) {

@@ -95,6 +95,7 @@ export class TimelineView extends ItemView {
 	private viewportSaveTimeout: ReturnType<typeof setTimeout> | null = null;
 	private timelineCardRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 	private metadataChangeTimeout: ReturnType<typeof setTimeout> | null = null;
+	private fileChangeRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	// Render guards
 	private hasRendered: boolean = false;
@@ -239,19 +240,51 @@ export class TimelineView extends ItemView {
 
 	// ── Card mutations (delegates to CardOperations) ────────
 
+	private captureItemState(item: TimelineItem): TimelineState {
+		return {
+			dateStart: item.dateStart,
+			dateEnd: item.dateEnd,
+			layer: item.layer ?? 0,
+		};
+	}
+
 	private async updateItemsResize(index: number, edge: 'left' | 'right', deltaX: number): Promise<void> {
+		const item = this.timelineItems[index];
+		const prevState = item?.type === 'note' ? this.captureItemState(item) : null;
+
 		await resizeItem(this.timelineItems, index, edge, deltaX, this.timeScale, this.app, this.cacheService);
 		this.component?.refreshItems?.(this.timelineItems);
+
+		const updated = this.timelineItems[index];
+		if (prevState && updated?.type === 'note') {
+			this.historyManager.record(updated.file, prevState, this.captureItemState(updated), 'resize');
+		}
 	}
 
 	private async updateItemsMove(index: number, deltaX: number, deltaY: number): Promise<void> {
+		const item = this.timelineItems[index];
+		const prevState = item?.type === 'note' ? this.captureItemState(item) : null;
+
 		await moveItem(this.timelineItems, index, deltaX, deltaY, this.timeScale, this.timelineId, this.app, this.cacheService);
 		this.component?.refreshItems?.(this.timelineItems);
+
+		const updated = this.timelineItems[index];
+		if (prevState && updated?.type === 'note') {
+			this.historyManager.record(updated.file, prevState, this.captureItemState(updated), 'move');
+		}
 	}
 
 	private async updateItemLayer(index: number, newLayer: number, newX: number, newWidth: number): Promise<void> {
+		const item = this.timelineItems[index];
+		const prevState = item?.type === 'note' ? this.captureItemState(item) : null;
+
 		await changeItemLayer(this.timelineItems, index, newLayer, newX, newWidth, this.timeScale, this.timelineId, this.app, this.cacheService);
 		this.component?.refreshItems?.(this.timelineItems);
+
+		const updated = this.timelineItems[index];
+		if (prevState && updated?.type === 'note') {
+			this.historyManager.record(updated.file, prevState, this.captureItemState(updated), 'layer-change');
+		}
 	}
 
 	// ── Open file / timeline ────────────────────────────────
@@ -514,6 +547,17 @@ export class TimelineView extends ItemView {
 	}
 
 	// ── Refresh helpers ─────────────────────────────────────
+
+	/**
+	 * Schedule a refresh of the timeline (debounced to avoid rapid refresh spam)
+	 * Called externally when files are created/deleted
+	 */
+	scheduleRefresh(): void {
+		if (this.fileChangeRefreshTimeout) clearTimeout(this.fileChangeRefreshTimeout);
+		this.fileChangeRefreshTimeout = setTimeout(() => {
+			void this.refreshTimeline();
+		}, 200);
+	}
 
 	private async refreshTimeline(): Promise<void> {
 		this.timelineItems = await this.collectTimelineItems();

@@ -179,6 +179,30 @@ export default class TimelinePlugin extends Plugin {
 			})
 		);
 
+		// Listen for file delete events to remove from cache and refresh views
+		this.registerEvent(
+			this.app.vault.on('delete', (file) => {
+				if (file instanceof TFile && file.extension === 'md') {
+					const removed = this.cacheService.handleFileDelete(file.path);
+					if (removed) {
+						this.refreshOpenTimelineViews();
+					}
+				}
+			})
+		);
+
+		// Listen for file create events to auto-add timeline files
+		this.registerEvent(
+			this.app.vault.on('create', (file) => {
+				if (file instanceof TFile && file.extension === 'md') {
+					// Debounce to allow metadata cache to populate
+					setTimeout(() => {
+						this.handleFileCreate(file);
+					}, 100);
+				}
+			})
+		);
+
 		debug(TAG, "Timeline plugin loaded");
 	}
 
@@ -293,6 +317,42 @@ export default class TimelinePlugin extends Plugin {
 				);
 				if (config) {
 					view.setTimelineConfig(config);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Refresh all open timeline views (e.g. after file deletion or creation)
+	 */
+	refreshOpenTimelineViews(): void {
+		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_TIMELINE);
+		for (const leaf of leaves) {
+			const view = leaf.view;
+			if (view instanceof TimelineView) {
+				view.scheduleRefresh();
+			}
+		}
+	}
+
+	/**
+	 * Handle new file creation - check if it's a timeline file and refresh relevant views
+	 */
+	private handleFileCreate(file: TFile): void {
+		const metadata = this.app.metadataCache.getFileCache(file);
+		const isTimelineFile = metadata?.frontmatter?.['timeline'] === true;
+		
+		if (!isTimelineFile) return;
+		
+		// Find which timeline(s) this file belongs to and refresh those views
+		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_TIMELINE);
+		for (const leaf of leaves) {
+			const view = leaf.view;
+			if (view instanceof TimelineView) {
+				const rootPath = view.getRootPath();
+				// Check if file is within this timeline's scope
+				if (rootPath === "" || file.path.startsWith(rootPath + "/") || file.path === rootPath) {
+					view.scheduleRefresh();
 				}
 			}
 		}

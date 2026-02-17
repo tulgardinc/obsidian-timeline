@@ -51,6 +51,7 @@ export interface TimelineCache {
 const CACHE_VERSION = 1;
 const CACHE_FILE_PATH = './.timelines/timelines.json';
 const VIEWPORT_SAVE_DEBOUNCE = 500; // ms
+const TAG = 'TimelineCacheService';
 
 /**
  * Service for managing per-timeline data including:
@@ -417,6 +418,31 @@ export class TimelineCacheService {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Handle file delete - remove from all timeline caches by path
+	 * Returns true if any notes were removed
+	 */
+	handleFileDelete(filePath: string): boolean {
+		let removed = false;
+		
+		for (const [timelineId, timelineData] of Object.entries(this.cache.timelines)) {
+			// Find notes with matching lastPath
+			for (const [noteId, noteData] of Object.entries(timelineData.notes)) {
+				if (noteData.lastPath === filePath) {
+					delete timelineData.notes[noteId];
+					removed = true;
+					debug(TAG, `Removed deleted note ${noteId} from timeline ${timelineId}`);
+				}
+			}
+		}
+		
+		if (removed) {
+			this.scheduleSave();
+		}
+		
+		return removed;
 	}
 
 	/**
