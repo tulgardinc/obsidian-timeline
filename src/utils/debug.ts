@@ -23,8 +23,7 @@ export function isDebugEnabled(): boolean {
  */
 export function debug(prefix: string, ...args: unknown[]): void {
 	if (DEBUG_ENABLED) {
-		// eslint-disable-next-line no-console
-		console.log(`[${prefix}]`, ...args);
+		console.debug(`[${prefix}]`, ...args);
 	}
 }
 

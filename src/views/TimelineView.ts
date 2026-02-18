@@ -124,9 +124,8 @@ export class TimelineView extends ItemView {
 		this.timelineIcon = config.icon ?? "calendar";
 		this.rootPath = config.rootPath;
 
-		// Update the tab title to reflect the timeline name (using internal API)
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
-		(this.leaf as any).updateHeader();
+		// Update the tab title to reflect the timeline name (undocumented internal API)
+		this.leaf.updateHeader();
 
 		if (this.cacheService) {
 			const viewport = this.cacheService.getViewport(this.timelineId);
@@ -650,10 +649,10 @@ export class TimelineView extends ItemView {
 
 	private scheduleViewportSave(): void {
 		if (this.viewportSaveTimeout) clearTimeout(this.viewportSaveTimeout);
-		this.viewportSaveTimeout = setTimeout(() => { void this.saveViewport(); }, 500);
+		this.viewportSaveTimeout = setTimeout(() => { this.saveViewport(); }, 500);
 	}
 
-	private async saveViewport(): Promise<void> {
+	private saveViewport(): void {
 		if (!this.timelineId || !this.cacheService || !this.component) return;
 		const viewport = this.component.getViewport?.();
 		if (!viewport) return;
@@ -845,7 +844,7 @@ export class TimelineView extends ItemView {
 	}
 
 	async onClose() {
-		await this.saveViewport();
+		this.saveViewport();
 
 		if (this.metadataChangeTimeout) { clearTimeout(this.metadataChangeTimeout); this.metadataChangeTimeout = null; }
 		if (this.viewportSaveTimeout) { clearTimeout(this.viewportSaveTimeout); this.viewportSaveTimeout = null; }

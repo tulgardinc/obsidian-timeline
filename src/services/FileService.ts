@@ -142,7 +142,7 @@ export class FileService {
 	/**
 	 * Update note layer in cache (no longer writes to file)
 	 */
-	async updateNoteLayer(file: TFile, layer: number): Promise<void> {
+	updateNoteLayer(file: TFile, layer: number): void {
 		const noteId = this.cacheService.getNoteId(file);
 		if (noteId) {
 			this.cacheService.setNoteLayer(this.timelineId, noteId, layer, file.path);
